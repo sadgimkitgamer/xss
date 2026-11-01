@@ -408,22 +408,29 @@
         while (el && el.tagName !== 'YTMUSIC-PLAYER-QUEUE-ITEM') el = dir > 0 ? el.nextElementSibling : el.previousElementSibling;
         return el && (el.querySelector('.song-title, yt-formatted-string') || el);
       };
-      // Prefer YouTube Music's own controls (they keep its queue in sync), the
-      // raw player API is a last resort.
+      // YouTube Music's own controls keep its queue in sync. In the mini player the
+      // Next/Previous buttons aren't on the page, so open the player briefly, press
+      // the button, and minimize it again.
+      const expandAndPress = () => {
+        if (playerOpen()) return false;
+        if (!click('ytmusic-player-bar .middle-controls .content-info-wrapper, ytmusic-player-bar .middle-controls, ytmusic-player-bar')) return false;
+        return new Promise(async (resolve) => {
+          for (let i = 0; i < 15 && !playerOpen(); i++) await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 250));
+          const ok = click(sel);
+          setTimeout(() => click('[aria-label="Minimize player page"], [aria-label="Minimise player page"], [aria-label="Minimize"]'), 1200);
+          resolve(ok);
+        });
+      };
       const methods = [
         ['media session', () => call(dir > 0 ? 'nexttrack' : 'previoustrack')],
         ['button', () => click(sel)],
+        ['open player + button', expandAndPress],
         ['queue', () => { const el = queueItem(); if (!el) return false; el.click(); return true; }],
-        ['player api', () => {
-          const fn = player && (dir > 0 ? player.nextVideo : player.previousVideo);
-          if (typeof fn !== 'function') return false;
-          fn.call(player);
-          return true;
-        }],
       ];
       for (const [name, fn] of methods) {
         let tried = false;
-        try { tried = !!fn(); } catch (e) {}
+        try { tried = !!(await fn()); } catch (e) {}
         if (!tried) continue;
         for (let i = 0; i < 20; i++) {           // wait up to ~4s for the song to change
           await new Promise((r) => setTimeout(r, 200));
