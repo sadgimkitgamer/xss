@@ -9,6 +9,7 @@ SONG="https://music.youtube.com/watch?v=dQw4w9WgXcQ"
 
 adb install -r "$APK"
 adb shell pm grant com.ember.music android.permission.POST_NOTIFICATIONS || true
+adb logcat -G 16M || true
 adb logcat -c
 
 shot() {
@@ -63,7 +64,7 @@ echo "after call: playing=$AFTER"
 adb logcat -d -s Ember:I > "$OUT/ember.log"
 adb logcat -d > "$OUT/full.log"
 echo "================ Ember log (last 120 lines) ================"
-tail -120 "$OUT/ember.log"
+grep -v 'console error' "$OUT/ember.log" | grep -v 'state {' | tail -80
 echo "============================================================"
 echo "RESULT foreground=$FG($P1) background=$BG($P2) screenoff=$OFF($P3)"
 
@@ -76,6 +77,10 @@ if grep -q 'audio focus change -[12]' "$OUT/ember.log"; then
 else
   echo "WARN: emulator call did not take audio focus; focus handling not exercised"
 fi
+
+echo "--- loop:"
+grep -E "loop: |action repeat" "$OUT/ember.log" || echo "(none)"
+grep -q 'loop: restarted song' "$OUT/ember.log" || { echo "FAIL: loop did not restart the song"; exit 1; }
 
 echo "--- swipe down:"
 grep -E 'swipe down' "$OUT/ember.log" || echo "(none)"

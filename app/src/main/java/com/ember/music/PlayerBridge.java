@@ -27,6 +27,7 @@ final class PlayerBridge {
         String videoId = "";
         boolean liked;
         boolean saved;
+        boolean repeat;
     }
 
     interface Listener {
@@ -134,6 +135,7 @@ final class PlayerBridge {
                 s.videoId = o.optString("videoId");
                 s.liked = o.optBoolean("liked");
                 s.saved = o.optBoolean("saved");
+                s.repeat = o.optBoolean("repeat");
                 MAIN.post(() -> {
                     last = s;
                     if (listener != null) listener.onState(s);

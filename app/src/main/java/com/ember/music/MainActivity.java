@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.MutableContextWrapper;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -77,6 +78,7 @@ public class MainActivity extends Activity {
     private static boolean docStartScript;
     private static String injectJs;
 
+    private static int consoleErrors;
     private PlayerWebView web;
     private ProgressBar progress;
     private View splash;
@@ -119,6 +121,10 @@ public class MainActivity extends Activity {
                 }, 50000L);
                 // Skip while the app is in the background (the test presses Home at ~60s)
                 web.postDelayed(() -> PlayerBridge.control("next"), 85000L);
+                // Loop: turn it on, jump near the end of the song, and see it start over
+                web.postDelayed(() -> PlayerBridge.control("repeat"), 98000L);
+                web.postDelayed(() -> PlayerBridge.control("seek",
+                        Math.max(0, PlayerBridge.last.dur - 6000)), 100000L);
             }
         } else if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             web.loadUrl(HOME);
@@ -217,14 +223,14 @@ public class MainActivity extends Activity {
         // Small button to choose which of your playlists "Quick save" adds songs to
         ImageButton pick = new ImageButton(this);
         pick.setImageResource(R.drawable.ic_save);
-        pick.setContentDescription("Choose quick-save playlist");
+        pick.setContentDescription("Ember settings");
         GradientDrawable round = new GradientDrawable();
         round.setShape(GradientDrawable.OVAL);
         round.setColor(ACCENT);
         pick.setBackground(round);
         pick.setElevation(dp(6));
         pick.setAlpha(0.9f);
-        pick.setOnClickListener(v -> showPlaylistPicker());
+        pick.setOnClickListener(v -> showMenu());
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.BOTTOM | Gravity.END);
         lp.setMargins(0, 0, dp(14), dp(150));
         root.addView(pick, lp);
@@ -356,12 +362,51 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onConsoleMessage(ConsoleMessage m) {
-                if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                // Only a few real errors – YouTube's page is noisy and would flood the log
+                if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR
+                        && !m.message().contains("[Report Only]")
+                        && consoleErrors++ < 15) {
                     Log.w(PlayerBridge.TAG, "console error: " + m.message() + " @" + m.sourceId() + ":" + m.lineNumber());
                 }
                 return true;
             }
         });
+    }
+
+    private void showMenu() {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Ember")
+                .setItems(new String[]{"Quick-save playlist…", "Lock-screen buttons…"}, (d, which) -> {
+                    if (which == 0) showPlaylistPicker(); else showButtonPicker();
+                })
+                .show();
+    }
+
+    /** Lets you pick the two extra buttons (Like / Quick save / Loop) for the lock-screen player. */
+    private void showButtonPicker() {
+        String[] keys = {"like", "save", "repeat"};
+        String[] names = {"👍 Like", "Quick save", "Loop song"};
+        SharedPreferences prefs = getSharedPreferences(MusicService.PREFS, MODE_PRIVATE);
+        List<String> current = new ArrayList<>(java.util.Arrays.asList(
+                prefs.getString(MusicService.PREF_EXTRAS, MusicService.DEFAULT_EXTRAS).split(",")));
+        boolean[] checked = new boolean[keys.length];
+        for (int i = 0; i < keys.length; i++) checked[i] = current.contains(keys[i]);
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Pick 2 lock-screen buttons")
+                .setMultiChoiceItems(names, checked, (d, which, isChecked) -> checked[which] = isChecked)
+                .setPositiveButton("Save", (d, w) -> {
+                    List<String> picked = new ArrayList<>();
+                    for (int i = 0; i < keys.length; i++) if (checked[i]) picked.add(keys[i]);
+                    if (picked.size() != 2) {
+                        Toast.makeText(this, "Pick exactly 2 buttons", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    prefs.edit().putString(MusicService.PREF_EXTRAS, picked.get(0) + "," + picked.get(1)).apply();
+                    startService(new Intent(this, MusicService.class).setAction(MusicService.ACTION_REFRESH));
+                    Toast.makeText(this, "Lock-screen buttons updated", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showPlaylistPicker() {

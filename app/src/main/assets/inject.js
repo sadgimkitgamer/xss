@@ -506,6 +506,34 @@
     document.addEventListener('touchcancel', () => { active = false; dragging = false; setDrag(0); }, { capture: true, passive: true });
   })();
 
+  /* ---------- 9. Loop the current song ---------- */
+  let repeatOne = false;
+  let loopGuard = 0;
+  function restartForLoop(v) {
+    if (Date.now() - loopGuard < 1500) return;
+    loopGuard = Date.now();
+    v.currentTime = 0;
+    const p = v.play();
+    if (p && p.catch) p.catch(() => {});
+    log('loop: restarted song');
+  }
+  // Jump back just before the end so YouTube Music never moves on to the next song…
+  document.addEventListener('timeupdate', (e) => {
+    const v = e.target;
+    if (!repeatOne || mutedForAd || !v || !isFinite(v.duration) || v.duration < 5) return;
+    if (v.duration - v.currentTime < 0.45) restartForLoop(v);
+  }, true);
+  // …and if it does reach the end, stop YouTube Music from seeing it.
+  document.addEventListener('ended', (e) => {
+    if (!repeatOne || mutedForAd) return;
+    e.stopImmediatePropagation();
+    restartForLoop(e.target);
+  }, true);
+  function toggleRepeat() {
+    repeatOne = !repeatOne;
+    done('repeat', true, repeatOne ? '🔁 Looping this song' : 'Loop off');
+  }
+
   window.__emberControl = function (cmd, arg) {
     const v = q('video');
     switch (cmd) {
@@ -534,6 +562,9 @@
         return;
       case 'save':
         quickSave();
+        return;
+      case 'repeat':
+        toggleRepeat();
         return;
       case 'playlists':
         listPlaylists();
@@ -566,7 +597,8 @@
     s.videoId = currentVideoId();
     s.liked = s.videoId ? isLiked(s.videoId) : false;
     s.saved = savedIds.has(s.videoId);
-    const key = [s.title, s.artist, s.art, s.playing, s.dur, s.videoId, s.liked, s.saved].join('|');
+    s.repeat = repeatOne;
+    const key = [s.title, s.artist, s.art, s.playing, s.dur, s.videoId, s.liked, s.saved, s.repeat].join('|');
     const now = Date.now();
     if (key !== lastKey || now - lastSent > 3000) {
       lastKey = key; lastSent = now;
