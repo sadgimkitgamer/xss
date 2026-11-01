@@ -35,7 +35,7 @@ echo "== Swipe down on the player"
 adb shell input swipe 160 170 160 560 250
 sleep 4
 shot 1b-after-swipe
-adb logcat -d -s Ember:I | grep -E 'swipe down|heartbeat' | tail -3
+adb logcat -d -s Ember:I | grep -E 'swipe|heartbeat' | tail -4
 
 echo "== Background: press HOME"
 adb shell input keyevent KEYCODE_HOME
@@ -83,13 +83,13 @@ grep -E "loop: |action repeat" "$OUT/ember.log" || echo "(none)"
 grep -q 'loop: restarted song' "$OUT/ember.log" || { echo "FAIL: loop did not restart the song"; exit 1; }
 
 echo "--- swipe down:"
-grep -E 'swipe down' "$OUT/ember.log" || echo "(none)"
+grep -E 'swipe' "$OUT/ember.log" || echo "(none)"
 grep -q 'swipe down -> closed player' "$OUT/ember.log" || { echo "FAIL: swipe down did not close the player"; exit 1; }
 
 echo "--- like / save results:"
 grep -E 'action (like|save)|playlists \{' "$OUT/ember.log" || echo "(none)"
-grep -E 'page: (next|prev)' "$OUT/ember.log" || true
-grep -q 'page: next via' "$OUT/ember.log" || { echo "FAIL: skip to next song did not work"; exit 1; }
+grep -E 'page: (next|prev|new song)' "$OUT/ember.log" || true
+grep -q 'page: new song playing' "$OUT/ember.log" || { echo "FAIL: skip to next song did not work"; exit 1; }
 grep -q 'playlists {' "$OUT/ember.log" || { echo "FAIL: playlist picker got no answer"; exit 1; }
 grep -qE 'action like ' "$OUT/ember.log" || { echo "FAIL: like button did nothing"; exit 1; }
 grep -qE 'action save ' "$OUT/ember.log" || { echo "FAIL: save button did nothing"; exit 1; }

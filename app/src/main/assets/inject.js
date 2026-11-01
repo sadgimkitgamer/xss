@@ -408,16 +408,18 @@
         while (el && el.tagName !== 'YTMUSIC-PLAYER-QUEUE-ITEM') el = dir > 0 ? el.nextElementSibling : el.previousElementSibling;
         return el && (el.querySelector('.song-title, yt-formatted-string') || el);
       };
+      // Prefer YouTube Music's own controls (they keep its queue in sync), the
+      // raw player API is a last resort.
       const methods = [
         ['media session', () => call(dir > 0 ? 'nexttrack' : 'previoustrack')],
+        ['button', () => click(sel)],
+        ['queue', () => { const el = queueItem(); if (!el) return false; el.click(); return true; }],
         ['player api', () => {
           const fn = player && (dir > 0 ? player.nextVideo : player.previousVideo);
           if (typeof fn !== 'function') return false;
           fn.call(player);
           return true;
         }],
-        ['button', () => click(sel)],
-        ['queue', () => { const el = queueItem(); if (!el) return false; el.click(); return true; }],
       ];
       for (const [name, fn] of methods) {
         let tried = false;
@@ -427,6 +429,14 @@
           await new Promise((r) => setTimeout(r, 200));
           if (currentVideoId() !== before) {
             log((dir > 0 ? 'next' : 'prev') + ' via ' + name + ' -> ' + currentVideoId());
+            // make sure the new song actually starts
+            for (let j = 0; j < 30; j++) {
+              await new Promise((r) => setTimeout(r, 300));
+              const nv = q('video');
+              if (nv && nv.readyState >= 3 && nv.currentTime > 0.3) { log('new song playing'); return; }
+              if (nv && nv.paused && j === 10) { wantPlay = true; const pp = nv.play(); if (pp && pp.catch) pp.catch(() => {}); }
+            }
+            log('new song did not start (ready=' + (q('video') || {}).readyState + ')');
             return;
           }
         }
@@ -462,7 +472,8 @@
   }
   async function minimizePlayer() {
     const methods = [
-      ['button', () => click('[aria-label="Minimize"], [aria-label="Close player"], [aria-label="Collapse"], ' +
+      ['button', () => click('[aria-label="Minimize player page"], [aria-label="Minimise player page"], ' +
+        '[aria-label="Minimize"], [aria-label="Close player"], [aria-label="Collapse"], ' +
         '[aria-label="Minimise"], .player-minimize-button, ytmusic-player-page #minimize-button')],
       ['player bar', () => click('ytmusic-player-bar .middle-controls .content-info-wrapper, ytmusic-player-bar .middle-controls')],
       ['back', () => { if (history.length > 1) { history.back(); return true; } return false; }],
@@ -483,17 +494,16 @@
     let sx = 0, sy = 0, st = 0, active = false, dragging = false;
     const blocked = (t) => t && t.closest && t.closest(
       'tp-yt-paper-slider, #progress-bar, input, textarea, ytmusic-player-queue, #side-panel, .slider');
+    // Don't steal the gesture from lists you're scrolling (Up next, Lyrics, Related)
     const scrolledParent = (t) => {
-      for (let el = t; el && el !== document.body; el = el.parentElement) {
-        if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight) return true;
-      }
-      return false;
+      const list = t && t.closest && t.closest('ytmusic-tab-renderer, #tab-renderer, .tab-content, ytmusic-player-queue');
+      return !!(list && list.scrollTop > 0);
     };
     document.addEventListener('touchstart', (e) => {
       active = false; dragging = false;
       if (e.touches.length !== 1 || !playerOpen()) return;
       const t = e.target;
-      if (blocked(t) || scrolledParent(t)) return;
+      if (blocked(t) || scrolledParent(t)) { log('swipe ignored (on ' + (t.tagName || '?').toLowerCase() + ')'); return; }
       sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now(); active = true;
     }, { capture: true, passive: true });
     document.addEventListener('touchmove', (e) => {
@@ -511,6 +521,7 @@
       const flick = dy > 80 && dt < 350;
       setDrag(0);
       if (dragging && (far || flick) && Math.abs(dx) < dy * 0.7) minimizePlayer();
+      else if (dy > 40) log('swipe too short/sideways (dy=' + Math.round(dy) + ', dx=' + Math.round(dx) + ')');
       dragging = false;
     };
     document.addEventListener('touchend', end, { capture: true, passive: true });
@@ -640,7 +651,7 @@
   let tickCount = 0;
   function tick() {
     addTheme(); skipAds(); report();
-    if (tickCount % 2 === 0) checkInterruption();
+    if (++tickCount % 2 === 0) checkInterruption();
     if (tickCount % 20 === 0) {
       const v = q('video');
       log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +
