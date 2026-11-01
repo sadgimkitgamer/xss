@@ -385,23 +385,23 @@ public class MainActivity extends Activity {
     /** Lets you pick the two extra buttons (Like / Quick save / Loop) for the lock-screen player. */
     private void showButtonPicker() {
         String[] keys = {"like", "save", "repeat"};
-        String[] names = {"👍 Like", "Quick save", "Loop song"};
+        String[] names = {"👍 Like", "Save to playlist", "🔁 Loop song"};
         SharedPreferences prefs = getSharedPreferences(MusicService.PREFS, MODE_PRIVATE);
         List<String> current = new ArrayList<>(java.util.Arrays.asList(
                 prefs.getString(MusicService.PREF_EXTRAS, MusicService.DEFAULT_EXTRAS).split(",")));
         boolean[] checked = new boolean[keys.length];
         for (int i = 0; i < keys.length; i++) checked[i] = current.contains(keys[i]);
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Pick 2 lock-screen buttons")
+                .setTitle("Lock-screen buttons (pick 2 or 3 – with 3, Previous is hidden)")
                 .setMultiChoiceItems(names, checked, (d, which, isChecked) -> checked[which] = isChecked)
                 .setPositiveButton("Save", (d, w) -> {
                     List<String> picked = new ArrayList<>();
                     for (int i = 0; i < keys.length; i++) if (checked[i]) picked.add(keys[i]);
-                    if (picked.size() != 2) {
-                        Toast.makeText(this, "Pick exactly 2 buttons", Toast.LENGTH_LONG).show();
+                    if (picked.size() < 2) {
+                        Toast.makeText(this, "Pick at least 2 buttons", Toast.LENGTH_LONG).show();
                         return;
                     }
-                    prefs.edit().putString(MusicService.PREF_EXTRAS, picked.get(0) + "," + picked.get(1)).apply();
+                    prefs.edit().putString(MusicService.PREF_EXTRAS, String.join(",", picked)).apply();
                     startService(new Intent(this, MusicService.class).setAction(MusicService.ACTION_REFRESH));
                     Toast.makeText(this, "Lock-screen buttons updated", Toast.LENGTH_SHORT).show();
                 })

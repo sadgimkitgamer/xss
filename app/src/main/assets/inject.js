@@ -586,9 +586,23 @@
     const md = navigator.mediaSession && navigator.mediaSession.metadata;
     let art = '';
     if (md && md.artwork && md.artwork.length) art = md.artwork[md.artwork.length - 1].src;
+    // The page doesn't always fill in media-session info, so fall back to the player itself
+    let vd = null;
+    try { const p = q('#movie_player'); vd = p && p.getVideoData ? p.getVideoData() : null; } catch (e) {}
+    const text = (sel) => { const el = q(sel); return el ? (el.getAttribute('title') || el.textContent || '').trim() : ''; };
+    const title = (md && md.title) || (vd && vd.title) ||
+      text('ytmusic-player-bar .title') || text('ytmusic-player-page .title') || '';
+    let artist = (md && md.artist) || (vd && vd.author) ||
+      text('ytmusic-player-bar .byline') || text('ytmusic-player-page .byline') || '';
+    artist = artist.replace(/\s*-\s*Topic$/, '').split(' • ')[0];
+    if (!art) {
+      const img = q('ytmusic-player-bar img.image, ytmusic-player-bar img');
+      if (img && img.src && img.src.startsWith('http')) art = img.src;
+      else if (vd && vd.video_id) art = 'https://i.ytimg.com/vi/' + vd.video_id + '/hqdefault.jpg';
+    }
     const s = {
-      title: md ? md.title || '' : '',
-      artist: md ? md.artist || '' : '',
+      title,
+      artist,
       art,
       playing: !!(v && !v.paused && !v.ended && !mutedForAd),
       pos: v ? Math.floor(v.currentTime * 1000) : 0,

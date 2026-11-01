@@ -78,6 +78,11 @@ else
   echo "WARN: emulator call did not take audio focus; focus handling not exercised"
 fi
 
+echo "--- song name shown:"
+LAST_TITLE=$(grep 'state {' "$OUT/ember.log" | tail -1 | sed -E 's/.*"title":"([^"]*)".*/\1/')
+echo "title=\"$LAST_TITLE\""
+[ -n "$LAST_TITLE" ] || { echo "FAIL: no song name for the notification"; exit 1; }
+
 echo "--- loop:"
 grep -E "loop: |action repeat" "$OUT/ember.log" || echo "(none)"
 grep -q 'loop: restarted song' "$OUT/ember.log" || { echo "FAIL: loop did not restart the song"; exit 1; }

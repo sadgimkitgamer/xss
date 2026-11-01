@@ -53,7 +53,7 @@ public class MusicService extends Service implements PlayerBridge.Listener {
     /** Which two extra buttons the lock-screen / notification player shows. */
     static final String PREFS = "ember";
     static final String PREF_EXTRAS = "extraButtons";
-    static final String DEFAULT_EXTRAS = "like,repeat";
+    static final String DEFAULT_EXTRAS = "like,repeat,save";
 
     private static final String CHANNEL = "playback";
     private static final int NOTIF_ID = 7;
@@ -161,13 +161,15 @@ public class MusicService extends Service implements PlayerBridge.Listener {
     public void onState(PlayerBridge.State s) {
         state = s;
 
+        String[] extras = extras();
         long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
-                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS
-                | PlaybackState.ACTION_SEEK_TO | PlaybackState.ACTION_STOP;
+                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SEEK_TO | PlaybackState.ACTION_STOP;
+        // With three extras, Previous gives up its spot so all three fit
+        if (extras.length < 3) actions |= PlaybackState.ACTION_SKIP_TO_PREVIOUS;
         // The chosen extras (Like / Save / Loop) show up as extra buttons in the
-        // lock-screen / quick-settings player (Android 13+ fits two).
+        // lock-screen / quick-settings player.
         PlaybackState.Builder pb = new PlaybackState.Builder().setActions(actions);
-        for (String extra : extras()) {
+        for (String extra : extras) {
             Extra e = extra(extra);
             pb.addCustomAction(new PlaybackState.CustomAction.Builder(e.action, e.label, e.icon).build());
         }
@@ -265,19 +267,22 @@ public class MusicService extends Service implements PlayerBridge.Listener {
                 .setShowWhen(false)
                 .setColor(MainActivity.ACCENT)
                 .setColorized(true)
-                .setDeleteIntent(serviceIntent(ACTION_DISMISS))
-                // Older Android shows these buttons; Android 13+ builds its player from the
-                // media session (incl. the custom actions above).
-                .addAction(extraAction(0))
-                .addAction(action(R.drawable.ic_prev, "Previous", ACTION_PREV))
-                .addAction(state.playing
-                        ? action(R.drawable.ic_pause, "Pause", ACTION_TOGGLE)
-                        : action(R.drawable.ic_play, "Play", ACTION_TOGGLE))
-                .addAction(action(R.drawable.ic_next, "Next", ACTION_NEXT))
-                .addAction(extraAction(1))
-                .setStyle(new Notification.MediaStyle()
-                        .setMediaSession(session.getSessionToken())
-                        .setShowActionsInCompactView(1, 2, 3));
+                .setDeleteIntent(serviceIntent(ACTION_DISMISS));
+        // Older Android shows these buttons; Android 13+ builds its player from the
+        // media session (incl. the custom actions above).
+        // [extra1] [prev] [play] [next] [extra2]   or with three extras:
+        // [extra1] [play] [next] [extra2] [extra3]
+        String[] extras = extras();
+        b.addAction(extraAction(extras[0]));
+        if (extras.length < 3) b.addAction(action(R.drawable.ic_prev, "Previous", ACTION_PREV));
+        b.addAction(state.playing
+                ? action(R.drawable.ic_pause, "Pause", ACTION_TOGGLE)
+                : action(R.drawable.ic_play, "Play", ACTION_TOGGLE));
+        b.addAction(action(R.drawable.ic_next, "Next", ACTION_NEXT));
+        for (int i = 1; i < extras.length; i++) b.addAction(extraAction(extras[i]));
+        b.setStyle(new Notification.MediaStyle()
+                .setMediaSession(session.getSessionToken())
+                .setShowActionsInCompactView(extras.length < 3 ? new int[]{1, 2, 3} : new int[]{0, 1, 2}));
         if (artBitmap != null) b.setLargeIcon(artBitmap);
         return b.build();
     }
@@ -292,7 +297,7 @@ public class MusicService extends Service implements PlayerBridge.Listener {
         switch (name) {
             case "save":
                 return state.saved ? new Extra(ACTION_SAVE, "Saved", R.drawable.ic_saved)
-                        : new Extra(ACTION_SAVE, "Quick save", R.drawable.ic_save);
+                        : new Extra(ACTION_SAVE, "Save to playlist", R.drawable.ic_save);
             case "repeat":
                 return state.repeat ? new Extra(ACTION_REPEAT, "Looping song (tap to stop)", R.drawable.ic_repeat_one)
                         : new Extra(ACTION_REPEAT, "Loop song", R.drawable.ic_repeat);
@@ -302,16 +307,16 @@ public class MusicService extends Service implements PlayerBridge.Listener {
         }
     }
 
-    /** The user's two chosen extra buttons, e.g. ["like", "repeat"]. */
+    /** The user's chosen extra buttons (2 or 3), e.g. ["like", "repeat", "save"]. */
     private String[] extras() {
         String v = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_EXTRAS, DEFAULT_EXTRAS);
         String[] parts = v.split(",");
-        if (parts.length >= 2) return new String[]{parts[0], parts[1]};
+        if (parts.length >= 2 && parts.length <= 3) return parts;
         return DEFAULT_EXTRAS.split(",");
     }
 
-    private Notification.Action extraAction(int i) {
-        Extra e = extra(extras()[i]);
+    private Notification.Action extraAction(String name) {
+        Extra e = extra(name);
         return action(e.icon, e.label, e.action);
     }
 
