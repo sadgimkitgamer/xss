@@ -11,6 +11,7 @@
   window.__ember = true;
 
   const log = (m) => { try { window.EmberNative && window.EmberNative.log(String(m)); } catch (e) {} };
+  log('script running at ' + location.href + ' (bridge ' + (window.EmberNative ? 'ok' : 'missing') + ')');
 
   /* ---------- 1. Background playback ---------- */
   // When the app is in the background Android stops drawing the page, so

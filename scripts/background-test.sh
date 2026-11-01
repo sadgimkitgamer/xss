@@ -11,7 +11,15 @@ adb install -r "$APK"
 adb shell pm grant com.ember.music android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
 
-shot() { adb exec-out screencap -p > "$OUT/$1.png" || true; }
+shot() {
+  adb exec-out screencap -p > "$OUT/$1.png" || true
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb shell cat /sdcard/ui.xml > "$OUT/$1.xml"
+  echo "--- on screen ($1):"
+  grep -oE '(text|content-desc)="[^"]+"' "$OUT/$1.xml" 2>/dev/null | sed -E 's/^[a-z-]+="//; s/"$//' | awk 'length>1' | head -40 | tr '\n' '|'
+  echo
+  echo "--- audio players:"
+  adb shell dumpsys audio | grep -iE 'AudioPlaybackConfiguration|state:' | head -6
+}
 pos() { adb logcat -d -s Ember:I | grep 'state {' | tail -1 | sed -E 's/.*"pos":([0-9]+).*/\1/'; }
 playing() { adb logcat -d -s Ember:I | grep 'state {' | tail -1 | grep -q '"playing":true'; }
 

@@ -3,6 +3,7 @@ package com.ember.music;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.MutableContextWrapper;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -18,8 +19,10 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -59,25 +62,44 @@ public class MainActivity extends Activity {
             "/api/stats/qoe?adformat", "/pcs/activeview"
     };
 
-    private WebView web;
+    /**
+     * The player page lives here, outside any one Activity instance, so Android
+     * recreating the screen (rotation, theme/font change, memory) never stops the music.
+     */
+    private static PlayerWebView shared;
+    private static boolean docStartScript;
+    private static String injectJs;
+
+    private PlayerWebView web;
     private ProgressBar progress;
     private View splash;
-    private String injectJs;
-    private boolean docStartScript;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
+        if (injectJs == null) injectJs = buildInjectJs();
+        PlayerBridge.closing = false;
 
-        injectJs = buildInjectJs();
-        setContentView(buildLayout());
-        setupWebView();
+        boolean reused = shared != null;
+        Log.i(PlayerBridge.TAG, "activity created (reusing player: " + reused + ")");
+        if (reused) {
+            web = shared;
+            web.context.setBaseContext(this);
+            if (web.getParent() != null) ((ViewGroup) web.getParent()).removeView(web);
+        } else {
+            web = shared = new PlayerWebView(new MutableContextWrapper(this));
+            configurePlayer(web);
+        }
+        setContentView(buildLayout(reused));
+        attachClients();
         PlayerBridge.attach(this, web);
 
         String deepLink = linkFrom(getIntent());
-        if (deepLink != null) {
+        if (reused && deepLink == null) {
+            // already playing / loaded – nothing to do
+        } else if (deepLink != null) {
             web.loadUrl(deepLink);
             if (getIntent().getBooleanExtra("autoplay", false)) {
                 // Used by the automated test: press play a few times while the page loads
@@ -121,30 +143,49 @@ public class MainActivity extends Activity {
         Log.i(PlayerBridge.TAG, "activity started (app in foreground)");
     }
 
-    private View buildLayout() {
+    /** WebView that never tells the page it went to the background. */
+    static final class PlayerWebView extends WebView {
+        final MutableContextWrapper context;
+
+        PlayerWebView(MutableContextWrapper ctx) {
+            super(ctx);
+            context = ctx;
+        }
+
+        // WebView pauses media as soon as its window is hidden (app in background,
+        // screen off). Always report "visible" so the music keeps going.
+        @Override
+        protected void onWindowVisibilityChanged(int visibility) {
+            Log.i(PlayerBridge.TAG, "window visibility " + visibility + " -> forcing VISIBLE");
+            super.onWindowVisibilityChanged(View.VISIBLE);
+        }
+
+        @Override
+        protected void onVisibilityChanged(View changedView, int visibility) {
+            super.onVisibilityChanged(changedView, View.VISIBLE);
+        }
+
+        @Override
+        public void onWindowFocusChanged(boolean hasWindowFocus) {
+            super.onWindowFocusChanged(true);
+        }
+    }
+
+    /** Fully tears down the player (used by the notification's Close button). */
+    static void destroyPlayer() {
+        if (shared == null) return;
+        Log.i(PlayerBridge.TAG, "destroying player");
+        if (shared.getParent() != null) ((ViewGroup) shared.getParent()).removeView(shared);
+        shared.stopLoading();
+        shared.destroy();
+        shared = null;
+    }
+
+    private View buildLayout(boolean reused) {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         root.setFitsSystemWindows(true);
 
-        web = new WebView(this) {
-            // WebView pauses media as soon as its window is hidden (app in background,
-            // screen off). Always report "visible" so the music keeps going.
-            @Override
-            protected void onWindowVisibilityChanged(int visibility) {
-                Log.i(PlayerBridge.TAG, "window visibility " + visibility + " -> forcing VISIBLE");
-                super.onWindowVisibilityChanged(View.VISIBLE);
-            }
-
-            @Override
-            protected void onVisibilityChanged(View changedView, int visibility) {
-                super.onVisibilityChanged(changedView, View.VISIBLE);
-            }
-
-            @Override
-            public void onWindowFocusChanged(boolean hasWindowFocus) {
-                super.onWindowFocusChanged(true);
-            }
-        };
         web.setBackgroundColor(Color.BLACK);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
@@ -178,12 +219,17 @@ public class MainActivity extends Activity {
         sp.addView(logo);
         sp.addView(sub);
         splash = sp;
-        root.addView(sp, new FrameLayout.LayoutParams(-1, -1));
-        root.postDelayed(this::hideSplash, 6000);
+        if (reused) {
+            splash = null;
+        } else {
+            root.addView(sp, new FrameLayout.LayoutParams(-1, -1));
+            root.postDelayed(this::hideSplash, 6000);
+        }
         return root;
     }
 
-    private void setupWebView() {
+    /** One-time setup of the shared player. */
+    private void configurePlayer(WebView web) {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -220,7 +266,10 @@ public class MainActivity extends Activity {
             WebViewCompat.addDocumentStartJavaScript(web, injectJs, origins);
             docStartScript = true;
         }
+    }
 
+    /** Hooks the player up to this screen's progress bar / splash. */
+    private void attachClients() {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
@@ -241,12 +290,28 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+                if (req.isForMainFrame()) {
+                    Log.w(PlayerBridge.TAG, "page error " + err.getErrorCode() + " " + err.getDescription() + " " + req.getUrl());
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse resp) {
+                if (req.isForMainFrame()) {
+                    Log.w(PlayerBridge.TAG, "page http " + resp.getStatusCode() + " " + req.getUrl());
+                }
+            }
+
+            @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                Log.i(PlayerBridge.TAG, "page started " + url);
                 if (!docStartScript && isYouTube(url)) view.evaluateJavascript(injectJs, null);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                Log.i(PlayerBridge.TAG, "page finished " + url);
                 if (isYouTube(url)) view.evaluateJavascript(injectJs, null);
                 hideSplash();
             }
@@ -257,6 +322,14 @@ public class MainActivity extends Activity {
             public void onProgressChanged(WebView view, int p) {
                 progress.setProgress(p);
                 progress.setVisibility(p >= 100 ? View.INVISIBLE : View.VISIBLE);
+            }
+
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage m) {
+                if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    Log.w(PlayerBridge.TAG, "console error: " + m.message() + " @" + m.sourceId() + ":" + m.lineNumber());
+                }
+                return true;
             }
         });
     }
@@ -334,11 +407,19 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        Log.i(PlayerBridge.TAG, "activity destroyed (finishing=" + isFinishing()
+                + ", config change=" + isChangingConfigurations()
+                + ", closing=" + PlayerBridge.closing + ", playing=" + PlayerBridge.last.playing + ")");
         PlayerBridge.detach();
-        stopService(new Intent(this, MusicService.class));
-        if (web != null) {
-            web.stopLoading();
-            web.destroy();
+        boolean stopEverything = PlayerBridge.closing
+                || (isFinishing() && !isChangingConfigurations() && !PlayerBridge.last.playing);
+        if (stopEverything) {
+            stopService(new Intent(this, MusicService.class));
+            destroyPlayer();
+        } else if (web != null) {
+            // Keep the music going: park the player until the screen comes back
+            if (web.getParent() != null) ((ViewGroup) web.getParent()).removeView(web);
+            web.context.setBaseContext(getApplicationContext());
         }
         super.onDestroy();
     }

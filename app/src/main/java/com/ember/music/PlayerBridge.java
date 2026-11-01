@@ -35,6 +35,8 @@ final class PlayerBridge {
     private static WeakReference<Activity> activityRef = new WeakReference<>(null);
     private static Listener listener;
     static State last = new State();
+    /** Set when the user pressed Close, so everything shuts down. */
+    static volatile boolean closing;
 
     private PlayerBridge() {}
 
@@ -68,9 +70,11 @@ final class PlayerBridge {
     }
 
     static void closeApp() {
+        closing = true;
         MAIN.post(() -> {
             Activity a = activityRef.get();
             if (a != null) a.finishAndRemoveTask();
+            else { MainActivity.destroyPlayer(); closing = false; }
         });
     }
 

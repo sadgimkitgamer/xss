@@ -239,6 +239,13 @@ public class MusicService extends Service implements PlayerBridge.Listener {
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // Swiped away from recents: keep going if music is playing, otherwise clean up
+        android.util.Log.i(PlayerBridge.TAG, "task removed (playing=" + state.playing + ")");
+        if (!state.playing) shutdown();
+    }
+
+    @Override
     public void onDestroy() {
         PlayerBridge.setListener(null);
         try { unregisterReceiver(noisy); } catch (Exception ignored) { }
