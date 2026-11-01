@@ -165,6 +165,145 @@
     }
   }
 
+
+  /* ---------- 6. Like & quick save ---------- */
+  const cfg = (k) => {
+    try {
+      const y = window.ytcfg;
+      if (!y) return undefined;
+      return typeof y.get === 'function' ? y.get(k) : (y.data_ || {})[k];
+    } catch (e) { return undefined; }
+  };
+  function currentVideoId() {
+    try {
+      const p = q('#movie_player');
+      const d = p && p.getVideoData && p.getVideoData();
+      if (d && d.video_id) return d.video_id;
+    } catch (e) {}
+    const m = location.search.match(/[?&]v=([\w-]{11})/);
+    return m ? m[1] : '';
+  }
+  function getCookie(name) {
+    const hit = document.cookie.split('; ').find((c) => c.startsWith(name + '='));
+    return hit ? decodeURIComponent(hit.slice(name.length + 1)) : '';
+  }
+  async function authHeader() {
+    const sid = getCookie('SAPISID') || getCookie('__Secure-3PAPISID');
+    if (!sid) return null;
+    const ts = Math.floor(Date.now() / 1000);
+    const digest = await crypto.subtle.digest('SHA-1',
+      new TextEncoder().encode(ts + ' ' + sid + ' ' + location.origin));
+    const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    return 'SAPISIDHASH ' + ts + '_' + hex;
+  }
+  // Calls YouTube Music's own API as the signed-in user.
+  async function api(endpoint, body) {
+    const auth = await authHeader();
+    const context = cfg('INNERTUBE_CONTEXT');
+    if (!auth || cfg('LOGGED_IN') === false) throw new Error('signin');
+    if (!context) throw new Error('page not ready');
+    const key = cfg('INNERTUBE_API_KEY');
+    const res = await fetch('/youtubei/v1/' + endpoint + '?prettyPrint=false' + (key ? '&key=' + key : ''), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': auth,
+        'X-Origin': location.origin,
+        'X-Goog-AuthUser': String(cfg('SESSION_INDEX') || 0),
+        'X-Youtube-Client-Name': String(cfg('INNERTUBE_CONTEXT_CLIENT_NAME') || 67),
+        'X-Youtube-Client-Version': String(cfg('INNERTUBE_CLIENT_VERSION') || ''),
+      },
+      body: JSON.stringify(Object.assign({ context }, body)),
+    });
+    if (res.status === 401 || res.status === 403) throw new Error('signin');
+    if (!res.ok) throw new Error('error ' + res.status);
+    return res.json();
+  }
+  const errText = (e, what) =>
+    e && e.message === 'signin' ? 'Sign in to YouTube Music to ' + what : 'Couldn\'t ' + what + ' (' + (e && e.message) + ')';
+  function done(kind, ok, msg) {
+    log(kind + ': ' + msg);
+    try { window.EmberNative && window.EmberNative.onAction(kind, ok, msg); } catch (e) {}
+    lastKey = '';
+    report();
+  }
+
+  const likeOverride = {};   // videoId -> liked, for changes made from the notification
+  function likeRenderer() {
+    return q('ytmusic-player-bar ytmusic-like-button-renderer') ||
+      q('ytmusic-player-page ytmusic-like-button-renderer') || q('ytmusic-like-button-renderer');
+  }
+  function isLiked(id) {
+    const el = likeRenderer();
+    const status = el ? el.getAttribute('like-status') : null;
+    if (status === 'LIKE') return true;
+    return !!likeOverride[id];
+  }
+  async function toggleLike() {
+    const id = currentVideoId();
+    if (!id) return done('like', false, 'Nothing is playing');
+    const want = !isLiked(id);
+    try {
+      // Tap the page's own like button first so the app UI stays in sync…
+      const el = likeRenderer();
+      const btn = el && el.querySelector(want
+        ? '#button-shape-like button, .like button, [aria-label="Like"]'
+        : '#button-shape-like button, .like button, [aria-label="Unlike"], [aria-label="Like"]');
+      if (btn) {
+        btn.click();
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      const status = el ? el.getAttribute('like-status') : null;
+      // …and make sure it really happened via the API (safe to repeat).
+      if (status !== (want ? 'LIKE' : 'INDIFFERENT')) {
+        await api(want ? 'like/like' : 'like/removelike', { target: { videoId: id } });
+      }
+      likeOverride[id] = want;
+      done('like', true, want ? '👍 Liked – added to Liked music' : 'Like removed');
+    } catch (e) {
+      done('like', false, errText(e, 'like songs'));
+    }
+  }
+
+  const SAVE_KEY = 'ember.savePlaylistId';
+  const SAVE_NAME = 'Ember Saves';
+  const savedIds = new Set();
+  async function quickSave() {
+    const id = currentVideoId();
+    if (!id) return done('save', false, 'Nothing is playing');
+    try {
+      let playlistId = null;
+      try { playlistId = localStorage.getItem(SAVE_KEY); } catch (e) {}
+      let added = false;
+      if (playlistId) {
+        try {
+          const r = await api('browse/edit_playlist', {
+            playlistId,
+            actions: [{ action: 'ACTION_ADD_VIDEO', addedVideoId: id, dedupeOption: 'DEDUPE_OPTION_SKIP' }],
+          });
+          added = !r || !r.status || r.status === 'STATUS_SUCCEEDED';
+        } catch (e) {
+          if (e.message === 'signin') throw e;   // otherwise the playlist was probably deleted
+        }
+      }
+      if (!added) {
+        const r = await api('playlist/create', {
+          title: SAVE_NAME,
+          description: 'Songs quick-saved from Ember',
+          privacyStatus: 'PRIVATE',
+          videoIds: [id],
+        });
+        if (!r || !r.playlistId) throw new Error('could not create playlist');
+        try { localStorage.setItem(SAVE_KEY, r.playlistId); } catch (e) {}
+      }
+      savedIds.add(id);
+      done('save', true, 'Saved to "' + SAVE_NAME + '"');
+    } catch (e) {
+      done('save', false, errText(e, 'save songs'));
+    }
+  }
+
   window.__emberControl = function (cmd, arg) {
     const v = q('video');
     switch (cmd) {
@@ -188,6 +327,12 @@
         wantPlay = true;
         call('previoustrack') || click('.previous-button, [aria-label="Previous"], [aria-label="Previous song"]');
         break;
+      case 'like':
+        toggleLike();
+        return;
+      case 'save':
+        quickSave();
+        return;
       case 'seek':
         if (!call('seekto', { seekTime: arg / 1000 }) && v) v.currentTime = arg / 1000;
         break;
@@ -210,7 +355,10 @@
       pos: v ? Math.floor(v.currentTime * 1000) : 0,
       dur: v && isFinite(v.duration) ? Math.floor(v.duration * 1000) : 0,
     };
-    const key = [s.title, s.artist, s.art, s.playing, s.dur].join('|');
+    s.videoId = currentVideoId();
+    s.liked = s.videoId ? isLiked(s.videoId) : false;
+    s.saved = savedIds.has(s.videoId);
+    const key = [s.title, s.artist, s.art, s.playing, s.dur, s.videoId, s.liked, s.saved].join('|');
     const now = Date.now();
     if (key !== lastKey || now - lastSent > 3000) {
       lastKey = key; lastSent = now;

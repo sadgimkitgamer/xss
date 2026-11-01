@@ -24,10 +24,16 @@ final class PlayerBridge {
         boolean playing;
         long pos;
         long dur;
+        String videoId = "";
+        boolean liked;
+        boolean saved;
     }
 
     interface Listener {
         void onState(State s);
+
+        /** Result of a like / save request, to show to the user. */
+        void onAction(String kind, boolean ok, String message);
     }
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -86,6 +92,14 @@ final class PlayerBridge {
         }
 
         @JavascriptInterface
+        public void onAction(String kind, boolean ok, String message) {
+            Log.i(TAG, "action " + kind + " ok=" + ok + " " + message);
+            MAIN.post(() -> {
+                if (listener != null) listener.onAction(kind, ok, message);
+            });
+        }
+
+        @JavascriptInterface
         public void onState(String json) {
             Log.i(TAG, "state " + json);
             try {
@@ -97,6 +111,9 @@ final class PlayerBridge {
                 s.playing = o.optBoolean("playing");
                 s.pos = o.optLong("pos");
                 s.dur = o.optLong("dur");
+                s.videoId = o.optString("videoId");
+                s.liked = o.optBoolean("liked");
+                s.saved = o.optBoolean("saved");
                 MAIN.post(() -> {
                     last = s;
                     if (listener != null) listener.onState(s);

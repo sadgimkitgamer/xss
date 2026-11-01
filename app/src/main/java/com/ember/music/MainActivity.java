@@ -104,6 +104,8 @@ public class MainActivity extends Activity {
             if (getIntent().getBooleanExtra("autoplay", false)) {
                 // Used by the automated test: press play a few times while the page loads
                 for (int i = 1; i <= 6; i++) web.postDelayed(() -> PlayerBridge.control("play"), i * 5000L);
+                web.postDelayed(() -> PlayerBridge.control("like"), 40000L);
+                web.postDelayed(() -> PlayerBridge.control("save"), 45000L);
             }
         } else if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             web.loadUrl(HOME);

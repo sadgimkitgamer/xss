@@ -51,6 +51,11 @@ tail -120 "$OUT/ember.log"
 echo "============================================================"
 echo "RESULT foreground=$FG($P1) background=$BG($P2) screenoff=$OFF($P3)"
 
+echo "--- like / save results:"
+grep -E 'action (like|save)' "$OUT/ember.log" || echo "(none)"
+grep -qE 'action like ' "$OUT/ember.log" || { echo "FAIL: like button did nothing"; exit 1; }
+grep -qE 'action save ' "$OUT/ember.log" || { echo "FAIL: save button did nothing"; exit 1; }
+
 [ "$FG" = yes ] || { echo "FAIL: did not start playing in the foreground"; exit 1; }
 [ "$BG" = yes ] && [ "${P2:-0}" -gt "${P1:-0}" ] || { echo "FAIL: stopped in background"; exit 1; }
 [ "$OFF" = yes ] && [ "${P3:-0}" -gt "${P2:-0}" ] || { echo "FAIL: stopped with screen off"; exit 1; }

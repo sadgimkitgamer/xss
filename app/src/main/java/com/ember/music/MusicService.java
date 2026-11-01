@@ -41,6 +41,9 @@ public class MusicService extends Service implements PlayerBridge.Listener {
     static final String ACTION_NEXT = "com.ember.music.NEXT";
     static final String ACTION_PREV = "com.ember.music.PREV";
     static final String ACTION_STOP = "com.ember.music.STOP";
+    static final String ACTION_DISMISS = "com.ember.music.DISMISS";
+    static final String ACTION_LIKE = "com.ember.music.LIKE";
+    static final String ACTION_SAVE = "com.ember.music.SAVE";
 
     private static final String CHANNEL = "playback";
     private static final int NOTIF_ID = 7;
@@ -81,6 +84,10 @@ public class MusicService extends Service implements PlayerBridge.Listener {
             @Override public void onSkipToPrevious() { PlayerBridge.control("prev"); }
             @Override public void onSeekTo(long pos) { PlayerBridge.control("seek", pos); }
             @Override public void onStop() { shutdown(); }
+            @Override public void onCustomAction(String action, android.os.Bundle extras) {
+                if (ACTION_LIKE.equals(action)) PlayerBridge.control("like");
+                else if (ACTION_SAVE.equals(action)) PlayerBridge.control("save");
+            }
         });
         session.setSessionActivity(openAppIntent());
         session.setActive(true);
@@ -112,6 +119,12 @@ public class MusicService extends Service implements PlayerBridge.Listener {
         else if (ACTION_NEXT.equals(a)) PlayerBridge.control("next");
         else if (ACTION_PREV.equals(a)) PlayerBridge.control("prev");
         else if (ACTION_STOP.equals(a)) shutdown();
+        else if (ACTION_DISMISS.equals(a)) {
+            // Notification swiped away: stop if paused, otherwise bring it back
+            if (state.playing) nm.notify(NOTIF_ID, buildNotification()); else shutdown();
+        }
+        else if (ACTION_LIKE.equals(a)) PlayerBridge.control("like");
+        else if (ACTION_SAVE.equals(a)) PlayerBridge.control("save");
         return START_NOT_STICKY;
     }
 
@@ -122,8 +135,15 @@ public class MusicService extends Service implements PlayerBridge.Listener {
         long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
                 | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS
                 | PlaybackState.ACTION_SEEK_TO | PlaybackState.ACTION_STOP;
+        // Like + Save show up as extra buttons in the lock-screen / quick-settings player
         session.setPlaybackState(new PlaybackState.Builder()
                 .setActions(actions)
+                .addCustomAction(new PlaybackState.CustomAction.Builder(ACTION_LIKE,
+                        s.liked ? "Unlike" : "Like",
+                        s.liked ? R.drawable.ic_thumb_up_filled : R.drawable.ic_thumb_up).build())
+                .addCustomAction(new PlaybackState.CustomAction.Builder(ACTION_SAVE,
+                        s.saved ? "Saved" : "Quick save",
+                        s.saved ? R.drawable.ic_saved : R.drawable.ic_save).build())
                 .setState(s.playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
                         s.pos, s.playing ? 1f : 0f)
                 .build());
@@ -134,7 +154,8 @@ public class MusicService extends Service implements PlayerBridge.Listener {
             loadArt(s.art);
         }
 
-        String key = s.title + "|" + s.artist + "|" + s.dur + "|" + s.playing + "|" + (artBitmap != null);
+        String key = s.title + "|" + s.artist + "|" + s.dur + "|" + s.playing + "|" + (artBitmap != null)
+                + "|" + s.liked + "|" + s.saved;
         if (!key.equals(shownKey)) {
             shownKey = key;
             updateMetadata();
@@ -173,24 +194,43 @@ public class MusicService extends Service implements PlayerBridge.Listener {
                 .setShowWhen(false)
                 .setColor(MainActivity.ACCENT)
                 .setColorized(true)
+                .setDeleteIntent(serviceIntent(ACTION_DISMISS))
+                // Older Android shows these buttons; Android 13+ builds its player from the
+                // media session (incl. the Like / Save custom actions above).
+                .addAction(state.liked
+                        ? action(R.drawable.ic_thumb_up_filled, "Unlike", ACTION_LIKE)
+                        : action(R.drawable.ic_thumb_up, "Like", ACTION_LIKE))
                 .addAction(action(R.drawable.ic_prev, "Previous", ACTION_PREV))
                 .addAction(state.playing
                         ? action(R.drawable.ic_pause, "Pause", ACTION_TOGGLE)
                         : action(R.drawable.ic_play, "Play", ACTION_TOGGLE))
                 .addAction(action(R.drawable.ic_next, "Next", ACTION_NEXT))
-                .addAction(action(R.drawable.ic_close, "Close", ACTION_STOP))
+                .addAction(state.saved
+                        ? action(R.drawable.ic_saved, "Saved", ACTION_SAVE)
+                        : action(R.drawable.ic_save, "Quick save", ACTION_SAVE))
                 .setStyle(new Notification.MediaStyle()
                         .setMediaSession(session.getSessionToken())
-                        .setShowActionsInCompactView(0, 1, 2));
+                        .setShowActionsInCompactView(1, 2, 3));
         if (artBitmap != null) b.setLargeIcon(artBitmap);
         return b.build();
     }
 
     private Notification.Action action(int icon, String label, String act) {
+        return new Notification.Action.Builder(Icon.createWithResource(this, icon), label,
+                serviceIntent(act)).build();
+    }
+
+    private PendingIntent serviceIntent(String act) {
         Intent i = new Intent(this, MusicService.class).setAction(act);
-        PendingIntent pi = PendingIntent.getService(this, act.hashCode(), i,
+        return PendingIntent.getService(this, act.hashCode(), i,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Action.Builder(Icon.createWithResource(this, icon), label, pi).build();
+    }
+
+    @Override
+    public void onAction(String kind, boolean ok, String message) {
+        if (message != null && !message.isEmpty()) {
+            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     private PendingIntent openAppIntent() {
