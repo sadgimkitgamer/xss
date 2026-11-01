@@ -413,19 +413,44 @@
       // the button, and minimize it again.
       const expandAndPress = () => {
         if (playerOpen()) return false;
-        if (!click('ytmusic-player-bar .middle-controls .content-info-wrapper, ytmusic-player-bar .middle-controls, ytmusic-player-bar')) return false;
+        if (!click('ytmusic-player-bar .middle-controls .content-info-wrapper, ytmusic-player-bar .middle-controls, ytmusic-player-bar')) {
+          log('skip: no player bar to open');
+          return false;
+        }
         return new Promise(async (resolve) => {
           for (let i = 0; i < 15 && !playerOpen(); i++) await new Promise((r) => setTimeout(r, 100));
           await new Promise((r) => setTimeout(r, 250));
           const ok = click(sel);
+          log('skip: opened player=' + playerOpen() + ', pressed button=' + ok);
           setTimeout(() => click('[aria-label="Minimize player page"], [aria-label="Minimise player page"], [aria-label="Minimize"]'), 1200);
           resolve(ok);
         });
+      };
+      // Ask YouTube Music to navigate to the neighbouring song of the current queue.
+      const navigateInQueue = () => {
+        try {
+          if (!player || typeof player.getPlaylist !== 'function') return false;
+          const list = player.getPlaylist() || [];
+          const idx = player.getPlaylistIndex();
+          const target = list[idx + dir];
+          const pid = (player.getPlaylistId && player.getPlaylistId()) ||
+            (location.search.match(/[?&]list=([^&]+)/) || [])[1];
+          log('skip: queue ' + (idx + 1) + '/' + list.length + ' -> ' + target);
+          if (!target) return false;
+          const endpoint = { watchEndpoint: Object.assign({ videoId: target }, pid ? { playlistId: pid, index: idx + dir } : {}) };
+          const app = q('ytmusic-app') || document.body;
+          app.dispatchEvent(new CustomEvent('yt-navigate', { bubbles: true, composed: true, detail: { endpoint } }));
+          return true;
+        } catch (e) {
+          log('skip: queue navigation error ' + e);
+          return false;
+        }
       };
       const methods = [
         ['media session', () => call(dir > 0 ? 'nexttrack' : 'previoustrack')],
         ['button', () => click(sel)],
         ['open player + button', expandAndPress],
+        ['queue navigation', navigateInQueue],
         ['queue', () => { const el = queueItem(); if (!el) return false; el.click(); return true; }],
       ];
       for (const [name, fn] of methods) {
