@@ -44,12 +44,32 @@ P3=$(pos); playing && OFF=yes || OFF=no
 echo "screen off: playing=$OFF pos=$P3"
 adb shell input keyevent KEYCODE_WAKEUP
 
+echo "== Incoming phone call (another app takes the audio)"
+adb emu gsm call 5551234 || true
+sleep 12
+playing && CALL=yes || CALL=no
+echo "during call: playing=$CALL"
+adb emu gsm cancel 5551234 || true
+sleep 15
+playing && AFTER=yes || AFTER=no
+echo "after call: playing=$AFTER"
+
 adb logcat -d -s Ember:I > "$OUT/ember.log"
 adb logcat -d > "$OUT/full.log"
 echo "================ Ember log (last 120 lines) ================"
 tail -120 "$OUT/ember.log"
 echo "============================================================"
 echo "RESULT foreground=$FG($P1) background=$BG($P2) screenoff=$OFF($P3)"
+
+echo "--- audio focus:"
+grep -E 'audio focus|other audio|interruption|voice chat' "$OUT/ember.log" || echo "(none)"
+if grep -q 'audio focus change -[12]' "$OUT/ember.log"; then
+  grep -q 'other audio started -> pausing' "$OUT/ember.log" || { echo "FAIL: did not pause for other audio"; exit 1; }
+  [ "$CALL" = no ] || { echo "FAIL: kept playing during the call"; exit 1; }
+  [ "$AFTER" = yes ] || { echo "FAIL: did not resume after the call"; exit 1; }
+else
+  echo "WARN: emulator call did not take audio focus; focus handling not exercised"
+fi
 
 echo "--- like / save results:"
 grep -E 'action (like|save)|playlists \{' "$OUT/ember.log" || echo "(none)"

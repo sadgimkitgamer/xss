@@ -5,7 +5,7 @@ Ember is a lightweight Android app that signs into **your own YouTube Music acco
 - **Blocks ads** – strips ad data from the player, blocks ad/tracking requests, and auto-skips anything that slips through.
 - **Keeps playing when you leave the app** or lock your screen (foreground media service + wake lock).
 - **👍 Like** and **Quick save** buttons on the lock-screen / notification player, so you can keep songs you hear on autoplay without opening the app. Likes go to *Liked music*; quick saves go to **your own playlist** — tap the red playlist button in the app to choose which one (until you pick, they go to an automatically created private **Ember Saves** playlist).
-- Gives you a **media notification / lock-screen player** with previous · play/pause · next, and works with Bluetooth & headset buttons. Pauses automatically when headphones disconnect.
+- Gives you a **media notification / lock-screen player** with previous · play/pause · next, and works with Bluetooth & headset buttons. Pauses automatically when headphones disconnect, and when another app starts playing audio (resuming after short interruptions like phone calls). Voice chats (Discord etc.) don't pause it.
 - Re-skins YouTube Music in an **red & black** theme.
 
 ## Install on your phone

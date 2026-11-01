@@ -13,6 +13,8 @@ import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Icon;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.session.MediaSession;
@@ -23,6 +25,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.util.Log;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -59,6 +62,12 @@ public class MusicService extends Service implements PlayerBridge.Listener {
     private String shownKey = null;
     private String artUrl = null;
     private Bitmap artBitmap = null;
+
+    // ---- Audio focus: pause when another app starts playing ----
+    private AudioManager audio;
+    private AudioFocusRequest focusRequest;
+    private boolean hasFocus;
+    private boolean pausedByFocus;
 
     private final BroadcastReceiver noisy = new BroadcastReceiver() {
         @Override
@@ -102,6 +111,16 @@ public class MusicService extends Service implements PlayerBridge.Listener {
         }
 
         registerReceiver(noisy, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+
+        audio = getSystemService(AudioManager.class);
+        focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build())
+                .setWillPauseWhenDucked(false)   // let Android just lower us for short sounds
+                .setOnAudioFocusChangeListener(this::onFocusChange, main)
+                .build();
 
         Notification n = buildNotification();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -162,11 +181,54 @@ public class MusicService extends Service implements PlayerBridge.Listener {
             nm.notify(NOTIF_ID, buildNotification());
         }
 
+        // Claim audio focus whenever we start playing (unless a voice chat is going on),
+        // so other apps pause for us and we pause for them.
+        if (s.playing && !hasFocus && audio.getMode() == AudioManager.MODE_NORMAL) {
+            int r = audio.requestAudioFocus(focusRequest);
+            hasFocus = r == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+            Log.i(PlayerBridge.TAG, "audio focus request -> " + (hasFocus ? "granted" : "denied"));
+            if (!hasFocus) PlayerBridge.control("pause");
+        }
+
         if (s.playing) {
             if (!wakeLock.isHeld()) wakeLock.acquire();
             if (wifiLock != null && !wifiLock.isHeld()) wifiLock.acquire();
         } else {
             releaseLocks();
+        }
+    }
+
+    private void onFocusChange(int change) {
+        Log.i(PlayerBridge.TAG, "audio focus change " + change + " (mode " + audio.getMode() + ")");
+        switch (change) {
+            case AudioManager.AUDIOFOCUS_GAIN:
+                hasFocus = true;
+                if (pausedByFocus) {
+                    pausedByFocus = false;
+                    Log.i(PlayerBridge.TAG, "interruption over -> resuming");
+                    PlayerBridge.control("play");
+                }
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS:
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                hasFocus = false;
+                boolean transientLoss = change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT;
+                // Give the other app a moment to switch into call mode, then decide
+                main.postDelayed(() -> {
+                    if (audio.getMode() == AudioManager.MODE_IN_COMMUNICATION) {
+                        Log.i(PlayerBridge.TAG, "voice chat started -> keep playing");
+                        return;
+                    }
+                    if (!state.playing) return;
+                    pausedByFocus = transientLoss;
+                    Log.i(PlayerBridge.TAG, "other audio started -> pausing"
+                            + (transientLoss ? " (will resume)" : ""));
+                    PlayerBridge.control("pause");
+                }, 600);
+                break;
+            default:
+                // AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: Android lowers our volume automatically
+                break;
         }
     }
 
@@ -292,6 +354,7 @@ public class MusicService extends Service implements PlayerBridge.Listener {
         releaseLocks();
         session.setActive(false);
         session.release();
+        if (audio != null && focusRequest != null) audio.abandonAudioFocusRequest(focusRequest);
         io.shutdownNow();
         super.onDestroy();
     }
