@@ -1,0 +1,72 @@
+/* Ember – orange & black skin for YouTube Music */
+html, body, ytmusic-app, ytmusic-app-layout {
+  --ytmusic-general-background-a: #000 !important;
+  --ytmusic-general-background-b: #000 !important;
+  --ytmusic-general-background-c: #0a0a0a !important;
+  --ytmusic-brand-background-solid: #000 !important;
+  --ytmusic-brand-background-translucent: rgba(0, 0, 0, .92) !important;
+  --ytmusic-nav-bar: #000 !important;
+  --ytmusic-player-bar-background: #0d0d0d !important;
+  --ytmusic-search-background: #121212 !important;
+  --yt-spec-call-to-action: #ff7a00 !important;
+  --yt-spec-brand-button-background: #ff7a00 !important;
+  --yt-spec-static-brand-red: #ff7a00 !important;
+  --yt-spec-brand-icon-active: #ff7a00 !important;
+  --yt-spec-themed-blue: #ff7a00 !important;
+  --paper-slider-active-color: #ff7a00 !important;
+  --paper-slider-knob-color: #ff7a00 !important;
+  --paper-slider-knob-start-color: #ff7a00 !important;
+  --paper-progress-active-color: #ff7a00 !important;
+  --paper-slider-container-color: #3a2410 !important;
+  --paper-spinner-color: #ff7a00 !important;
+  --paper-tab-ink: #ff7a00 !important;
+  background: #000 !important;
+}
+
+ytmusic-nav-bar, #nav-bar-background, ytmusic-pivot-bar-renderer,
+ytmusic-player-bar, #player-bar-background, ytmusic-guide-renderer {
+  background: #000 !important;
+  border-color: rgba(255, 122, 0, .25) !important;
+}
+
+ytmusic-player-bar { border-top: 1px solid rgba(255, 122, 0, .35) !important; }
+
+#progress-bar, tp-yt-paper-slider, tp-yt-paper-progress {
+  --paper-slider-active-color: #ff7a00 !important;
+  --paper-slider-knob-color: #ff7a00 !important;
+  --paper-progress-active-color: #ff7a00 !important;
+}
+
+.play-pause-button, #play-pause-button, ytmusic-play-button-renderer {
+  color: #ff7a00 !important;
+  --ytmusic-play-button-icon-color: #000 !important;
+  --ytmusic-play-button-background-color: #ff7a00 !important;
+  --ytmusic-play-button-active-background-color: #ff7a00 !important;
+}
+
+ytmusic-pivot-bar-item-renderer.iron-selected,
+ytmusic-pivot-bar-item-renderer.iron-selected yt-icon,
+ytmusic-chip-cloud-chip-renderer[is-selected] a,
+tp-yt-paper-tab.iron-selected {
+  color: #ff7a00 !important;
+  fill: #ff7a00 !important;
+}
+
+ytmusic-chip-cloud-chip-renderer[is-selected] {
+  --ytmusic-chip-background-color: #ff7a00 !important;
+}
+
+a.yt-simple-endpoint:hover { color: #ff9a3d !important; }
+::selection { background: #ff7a00; color: #000; }
+::-webkit-scrollbar { width: 6px; background: #000; }
+::-webkit-scrollbar-thumb { background: #ff7a00; border-radius: 3px; }
+
+/* Hide ads, promos and upsells */
+ytmusic-mealbar-promo-renderer,
+ytmusic-statement-banner-renderer,
+ytmusic-upsell-dialog-renderer,
+ytd-ad-slot-renderer,
+#player-ads,
+.ytp-ad-overlay-container,
+.ytp-ad-image-overlay,
+ytmusic-promo-banner-renderer { display: none !important; }

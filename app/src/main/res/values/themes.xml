@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.Ember" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/ember_orange</item>
+        <item name="android:colorPrimaryDark">@color/ember_black</item>
+        <item name="android:colorAccent">@color/ember_orange</item>
+        <item name="android:windowBackground">@color/ember_black</item>
+        <item name="android:statusBarColor">@color/ember_black</item>
+        <item name="android:navigationBarColor">@color/ember_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
