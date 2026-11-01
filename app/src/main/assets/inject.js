@@ -370,6 +370,63 @@
     } catch (e) {}
   }
 
+  /* ---------- 7. Skip that works from the notification ----------
+   * The phone layout of YouTube Music often has no Next/Previous button in the
+   * page until the full player is opened, so try several ways and check that
+   * the song really changed before giving up. */
+  let skipping = false;
+  async function skip(dir) {
+    if (skipping) return;
+    skipping = true;
+    try {
+      const v = q('video');
+      if (dir < 0 && v && v.currentTime > 4) {   // like every player: first tap restarts the song
+        v.currentTime = 0;
+        log('prev: restarted song');
+        return;
+      }
+      const before = currentVideoId();
+      const player = q('#movie_player');
+      const sel = dir > 0
+        ? '.next-button, ytmusic-player-bar .next-button button, [aria-label="Next"], [aria-label="Next song"], [title="Next"]'
+        : '.previous-button, ytmusic-player-bar .previous-button button, [aria-label="Previous"], [aria-label="Previous song"], [title="Previous"]';
+      const queueItem = () => {
+        const cur = q('ytmusic-player-queue-item[selected], ytmusic-player-queue-item[play-button-state="playing"], ytmusic-player-queue-item[play-button-state="paused"]');
+        if (!cur) return null;
+        let el = dir > 0 ? cur.nextElementSibling : cur.previousElementSibling;
+        while (el && el.tagName !== 'YTMUSIC-PLAYER-QUEUE-ITEM') el = dir > 0 ? el.nextElementSibling : el.previousElementSibling;
+        return el && (el.querySelector('.song-title, yt-formatted-string') || el);
+      };
+      const methods = [
+        ['media session', () => call(dir > 0 ? 'nexttrack' : 'previoustrack')],
+        ['player api', () => {
+          const fn = player && (dir > 0 ? player.nextVideo : player.previousVideo);
+          if (typeof fn !== 'function') return false;
+          fn.call(player);
+          return true;
+        }],
+        ['button', () => click(sel)],
+        ['queue', () => { const el = queueItem(); if (!el) return false; el.click(); return true; }],
+      ];
+      for (const [name, fn] of methods) {
+        let tried = false;
+        try { tried = !!fn(); } catch (e) {}
+        if (!tried) continue;
+        for (let i = 0; i < 20; i++) {           // wait up to ~4s for the song to change
+          await new Promise((r) => setTimeout(r, 200));
+          if (currentVideoId() !== before) {
+            log((dir > 0 ? 'next' : 'prev') + ' via ' + name + ' -> ' + currentVideoId());
+            return;
+          }
+        }
+      }
+      log((dir > 0 ? 'next' : 'prev') + ' failed (handlers: ' + Object.keys(handlers).join(',') + ')');
+    } finally {
+      skipping = false;
+      setTimeout(report, 300);
+    }
+  }
+
   window.__emberControl = function (cmd, arg) {
     const v = q('video');
     switch (cmd) {
@@ -387,11 +444,11 @@
         break;
       case 'next':
         wantPlay = true;
-        call('nexttrack') || click('.next-button, [aria-label="Next"], [aria-label="Next song"]');
+        skip(1);
         break;
       case 'prev':
         wantPlay = true;
-        call('previoustrack') || click('.previous-button, [aria-label="Previous"], [aria-label="Previous song"]');
+        skip(-1);
         break;
       case 'like':
         toggleLike();

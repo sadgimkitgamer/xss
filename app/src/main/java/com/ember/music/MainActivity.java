@@ -117,6 +117,8 @@ public class MainActivity extends Activity {
                     PlayerBridge.playlistCallback = json -> Log.i(PlayerBridge.TAG, "playlists " + json);
                     PlayerBridge.control("playlists");
                 }, 50000L);
+                // Skip while the app is in the background (the test presses Home at ~60s)
+                web.postDelayed(() -> PlayerBridge.control("next"), 85000L);
             }
         } else if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             web.loadUrl(HOME);

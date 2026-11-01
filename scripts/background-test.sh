@@ -53,6 +53,8 @@ echo "RESULT foreground=$FG($P1) background=$BG($P2) screenoff=$OFF($P3)"
 
 echo "--- like / save results:"
 grep -E 'action (like|save)|playlists \{' "$OUT/ember.log" || echo "(none)"
+grep -E 'page: (next|prev)' "$OUT/ember.log" || true
+grep -q 'page: next via' "$OUT/ember.log" || { echo "FAIL: skip to next song did not work"; exit 1; }
 grep -q 'playlists {' "$OUT/ember.log" || { echo "FAIL: playlist picker got no answer"; exit 1; }
 grep -qE 'action like ' "$OUT/ember.log" || { echo "FAIL: like button did nothing"; exit 1; }
 grep -qE 'action save ' "$OUT/ember.log" || { echo "FAIL: save button did nothing"; exit 1; }
