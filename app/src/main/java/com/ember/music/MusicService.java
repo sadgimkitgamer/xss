@@ -171,7 +171,7 @@ public class MusicService extends Service implements PlayerBridge.Listener {
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setOngoing(true)
                 .setShowWhen(false)
-                .setColor(MainActivity.ORANGE)
+                .setColor(MainActivity.ACCENT)
                 .setColorized(true)
                 .addAction(action(R.drawable.ic_prev, "Previous", ACTION_PREV))
                 .addAction(state.playing

@@ -1,11 +1,11 @@
-# Ember 🔥 — YouTube Music for Android, in orange & black
+# Ember 🔥 — YouTube Music for Android, in red & black
 
 Ember is a lightweight Android app that signs into **your own YouTube Music account** and:
 
 - **Blocks ads** – strips ad data from the player, blocks ad/tracking requests, and auto-skips anything that slips through.
 - **Keeps playing when you leave the app** or lock your screen (foreground media service + wake lock).
 - Gives you a **media notification / lock-screen player** with previous · play/pause · next · close, and works with Bluetooth & headset buttons. Pauses automatically when headphones disconnect.
-- Re-skins YouTube Music in an **orange & black** theme.
+- Re-skins YouTube Music in an **red & black** theme.
 
 ## Install on your phone
 
@@ -34,7 +34,7 @@ Requires JDK 17 and the Android SDK (API 35).
 |---|---|
 | `MainActivity.java` | Hosts music.youtube.com in a WebView, blocks ad hosts, injects the scripts below |
 | `assets/inject.js` | Background-playback fix, ad pruning/skipping, playback bridge to Android |
-| `assets/theme.css` | Orange & black theme |
+| `assets/theme.css` | Red & black theme |
 | `MusicService.java` | Foreground service, media session and notification controls |
 
 Ember is an unofficial personal-use client, not affiliated with Google or YouTube.

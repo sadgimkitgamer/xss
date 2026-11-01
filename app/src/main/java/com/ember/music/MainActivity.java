@@ -44,7 +44,7 @@ import java.util.Set;
 public class MainActivity extends Activity {
 
     private static final String HOME = "https://music.youtube.com/";
-    static final int ORANGE = 0xFFFF7A00;
+    static final int ACCENT = 0xFFFF0033;
 
     /** Hosts / paths that only serve ads or ad tracking. */
     private static final String[] AD_HOSTS = {
@@ -95,7 +95,7 @@ public class MainActivity extends Activity {
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        ClipDrawable bar = new ClipDrawable(new ColorDrawable(ORANGE), Gravity.START, ClipDrawable.HORIZONTAL);
+        ClipDrawable bar = new ClipDrawable(new ColorDrawable(ACCENT), Gravity.START, ClipDrawable.HORIZONTAL);
         LayerDrawable layers = new LayerDrawable(new android.graphics.drawable.Drawable[]{
                 new ColorDrawable(Color.TRANSPARENT), bar});
         layers.setId(0, android.R.id.background);
@@ -112,7 +112,7 @@ public class MainActivity extends Activity {
         sp.setClickable(true);
         TextView logo = new TextView(this);
         logo.setText("EMBER");
-        logo.setTextColor(ORANGE);
+        logo.setTextColor(ACCENT);
         logo.setTextSize(44);
         logo.setLetterSpacing(0.3f);
         logo.setTypeface(Typeface.create("sans-serif-black", Typeface.BOLD));

@@ -2,7 +2,7 @@
  * Ember – injected into music.youtube.com at document start.
  *  1. Keeps playback alive when the app is in the background.
  *  2. Strips ads from player responses and auto-skips any that slip through.
- *  3. Applies the orange/black theme.
+ *  3. Applies the red/black theme.
  *  4. Bridges playback state + controls to the native media notification.
  */
 (function () {
