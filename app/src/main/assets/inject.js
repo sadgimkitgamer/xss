@@ -105,22 +105,51 @@
     return false;
   };
 
+  /* ---------- 5. Auto-resume ----------
+   * If the music pauses without you asking (Android backgrounding, screen off),
+   * start it again. Pauses you make yourself – tapping pause in the app,
+   * notification, lock screen, headphones – are respected. */
+  let wantPlay = false, lastGesture = 0;
+  ['pointerdown', 'touchstart', 'keydown', 'click'].forEach((t) =>
+    document.addEventListener(t, () => { lastGesture = Date.now(); }, true));
+  document.addEventListener('play', () => { wantPlay = true; }, true);
+  document.addEventListener('pause', (e) => {
+    const v = e.target;
+    if (Date.now() - lastGesture < 1500 || mutedForAd || (v && v.ended)) {
+      if (!mutedForAd && !(v && v.ended)) wantPlay = false;
+      return;
+    }
+    if (wantPlay) setTimeout(resume, 400);
+  }, true);
+  function resume() {
+    const v = q('video');
+    if (wantPlay && v && v.paused && !v.ended && Date.now() - lastGesture > 1500) {
+      const p = v.play();
+      if (p && p.catch) p.catch(() => {});
+    }
+  }
+
   window.__emberControl = function (cmd, arg) {
     const v = q('video');
     switch (cmd) {
       case 'play':
+        wantPlay = true;
         if (!call('play') && v) v.play();
         break;
       case 'pause':
+        wantPlay = false;
+        lastGesture = Date.now();
         if (!call('pause') && v) v.pause();
         break;
       case 'toggle':
         if (v && v.paused) window.__emberControl('play'); else window.__emberControl('pause');
         break;
       case 'next':
+        wantPlay = true;
         call('nexttrack') || click('.next-button, [aria-label="Next"], [aria-label="Next song"]');
         break;
       case 'prev':
+        wantPlay = true;
         call('previoustrack') || click('.previous-button, [aria-label="Previous"], [aria-label="Previous song"]');
         break;
       case 'seek':
@@ -155,7 +184,11 @@
   ['play', 'pause', 'ended', 'loadedmetadata', 'seeked'].forEach((t) =>
     document.addEventListener(t, () => { skipAds(); report(); }, true));
 
-  function tick() { addTheme(); skipAds(); report(); }
+  let tickCount = 0;
+  function tick() {
+    addTheme(); skipAds(); report();
+    if (++tickCount % 4 === 0) resume(); // every ~2s, as a backup
+  }
   setInterval(tick, 500);
   document.addEventListener('DOMContentLoaded', tick);
 })();

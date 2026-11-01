@@ -90,7 +90,14 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.BLACK);
         root.setFitsSystemWindows(true);
 
-        web = new WebView(this);
+        web = new WebView(this) {
+            // WebView pauses media as soon as its window is hidden (app in background,
+            // screen off). Always report "visible" so the music keeps going.
+            @Override
+            protected void onWindowVisibilityChanged(int visibility) {
+                super.onWindowVisibilityChanged(View.VISIBLE);
+            }
+        };
         web.setBackgroundColor(Color.BLACK);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
