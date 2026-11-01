@@ -10,7 +10,40 @@
   if (window.__ember) return;
   window.__ember = true;
 
+  const log = (m) => { try { window.EmberNative && window.EmberNative.log(String(m)); } catch (e) {} };
+
   /* ---------- 1. Background playback ---------- */
+  // When the app is in the background Android stops drawing the page, so
+  // requestAnimationFrame never fires and the player can stall. Fall back to a timer.
+  try {
+    const nRAF = window.requestAnimationFrame.bind(window);
+    const nCAF = window.cancelAnimationFrame.bind(window);
+    const pending = new Map();
+    let nextId = 1;
+    window.requestAnimationFrame = function (cb) {
+      const id = nextId++;
+      const entry = { raf: 0, timer: 0 };
+      const run = (t) => {
+        if (!pending.has(id)) return;
+        pending.delete(id);
+        nCAF(entry.raf);
+        clearTimeout(entry.timer);
+        cb(typeof t === 'number' ? t : performance.now());
+      };
+      entry.raf = nRAF(run);
+      entry.timer = setTimeout(() => run(performance.now()), 100);
+      pending.set(id, entry);
+      return id;
+    };
+    window.cancelAnimationFrame = function (id) {
+      const e = pending.get(id);
+      if (!e) return;
+      pending.delete(id);
+      nCAF(e.raf);
+      clearTimeout(e.timer);
+    };
+  } catch (e) {}
+
   try {
     const def = (obj, prop, val) =>
       Object.defineProperty(obj, prop, { get: () => val, configurable: true });
@@ -115,6 +148,7 @@
   document.addEventListener('play', () => { wantPlay = true; }, true);
   document.addEventListener('pause', (e) => {
     const v = e.target;
+    log('pause event (tapped ' + (Date.now() - lastGesture) + 'ms ago, wantPlay=' + wantPlay + ', ad=' + mutedForAd + ')');
     if (Date.now() - lastGesture < 1500 || mutedForAd || (v && v.ended)) {
       if (!mutedForAd && !(v && v.ended)) wantPlay = false;
       return;
@@ -124,8 +158,9 @@
   function resume() {
     const v = q('video');
     if (wantPlay && v && v.paused && !v.ended && Date.now() - lastGesture > 1500) {
+      log('auto-resuming playback');
       const p = v.play();
-      if (p && p.catch) p.catch(() => {});
+      if (p && p.catch) p.catch((err) => log('resume failed: ' + err));
     }
   }
 
@@ -184,10 +219,19 @@
   ['play', 'pause', 'ended', 'loadedmetadata', 'seeked'].forEach((t) =>
     document.addEventListener(t, () => { skipAds(); report(); }, true));
 
+  ['waiting', 'stalled', 'error', 'ended', 'emptied'].forEach((t) =>
+    document.addEventListener(t, () => log('media ' + t), true));
+  window.addEventListener('load', () => log('loaded ' + location.href + ' "' + document.title + '"'));
+
   let tickCount = 0;
   function tick() {
     addTheme(); skipAds(); report();
     if (++tickCount % 4 === 0) resume(); // every ~2s, as a backup
+    if (tickCount % 20 === 0) {
+      const v = q('video');
+      log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +
+        ' ready=' + v.readyState : '') + ' url=' + location.pathname + location.search);
+    }
   }
   setInterval(tick, 500);
   document.addEventListener('DOMContentLoaded', tick);

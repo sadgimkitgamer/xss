@@ -3,6 +3,7 @@ package com.ember.music;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -13,6 +14,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -74,7 +76,14 @@ public class MainActivity extends Activity {
         setupWebView();
         PlayerBridge.attach(this, web);
 
-        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
+        String deepLink = linkFrom(getIntent());
+        if (deepLink != null) {
+            web.loadUrl(deepLink);
+            if (getIntent().getBooleanExtra("autoplay", false)) {
+                // Used by the automated test: press play a few times while the page loads
+                for (int i = 1; i <= 6; i++) web.postDelayed(() -> PlayerBridge.control("play"), i * 5000L);
+            }
+        } else if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             web.loadUrl(HOME);
         }
 
@@ -83,6 +92,33 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
         startForegroundService(new Intent(this, MusicService.class));
+    }
+
+    /** Opens youtube / music.youtube links shared to or opened with Ember. */
+    private static String linkFrom(Intent i) {
+        if (i == null || !Intent.ACTION_VIEW.equals(i.getAction()) || i.getData() == null) return null;
+        Uri u = i.getData();
+        if (!isYouTube(u.toString())) return null;
+        return u.buildUpon().authority("music.youtube.com").build().toString();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String link = linkFrom(intent);
+        if (link != null) web.loadUrl(link);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Log.i(PlayerBridge.TAG, "activity stopped (app in background)");
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Log.i(PlayerBridge.TAG, "activity started (app in foreground)");
     }
 
     private View buildLayout() {
@@ -95,7 +131,18 @@ public class MainActivity extends Activity {
             // screen off). Always report "visible" so the music keeps going.
             @Override
             protected void onWindowVisibilityChanged(int visibility) {
+                Log.i(PlayerBridge.TAG, "window visibility " + visibility + " -> forcing VISIBLE");
                 super.onWindowVisibilityChanged(View.VISIBLE);
+            }
+
+            @Override
+            protected void onVisibilityChanged(View changedView, int visibility) {
+                super.onVisibilityChanged(changedView, View.VISIBLE);
+            }
+
+            @Override
+            public void onWindowFocusChanged(boolean hasWindowFocus) {
+                super.onWindowFocusChanged(true);
             }
         };
         web.setBackgroundColor(Color.BLACK);
@@ -158,6 +205,11 @@ public class MainActivity extends Activity {
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
         cm.setAcceptThirdPartyCookies(web, true);
+
+        // Keep the page's renderer process at high priority even when not on screen
+        web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        PackageInfo wv = WebView.getCurrentWebViewPackage();
+        Log.i(PlayerBridge.TAG, "WebView " + (wv == null ? "?" : wv.packageName + " " + wv.versionName));
 
         web.addJavascriptInterface(new PlayerBridge.JsInterface(), "EmberNative");
 

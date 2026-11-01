@@ -3,6 +3,7 @@ package com.ember.music;
 import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
@@ -12,6 +13,8 @@ import java.lang.ref.WeakReference;
 
 /** Glue between the YouTube Music page (WebView) and the native media service. */
 final class PlayerBridge {
+
+    static final String TAG = "Ember";
 
     /** Snapshot of what the page is playing. */
     static final class State {
@@ -74,7 +77,13 @@ final class PlayerBridge {
     /** Exposed to JavaScript as window.EmberNative. */
     static final class JsInterface {
         @JavascriptInterface
+        public void log(String msg) {
+            Log.i(TAG, "page: " + msg);
+        }
+
+        @JavascriptInterface
         public void onState(String json) {
+            Log.i(TAG, "state " + json);
             try {
                 JSONObject o = new JSONObject(json);
                 State s = new State();
