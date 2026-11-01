@@ -47,7 +47,10 @@ final class PlayerBridge {
 
     private PlayerBridge() {}
 
+    private static android.media.AudioManager audio;
+
     static void attach(Activity activity, WebView web) {
+        audio = activity.getApplicationContext().getSystemService(android.media.AudioManager.class);
         activityRef = new WeakReference<>(activity);
         webRef = new WeakReference<>(web);
     }
@@ -103,6 +106,12 @@ final class PlayerBridge {
         @JavascriptInterface
         public void log(String msg) {
             Log.i(TAG, "page: " + msg);
+        }
+
+        /** 0 normal, 1 ringing, 2 phone call, 3 voice chat (Discord etc.). */
+        @JavascriptInterface
+        public int audioMode() {
+            return audio == null ? 0 : audio.getMode();
         }
 
         @JavascriptInterface

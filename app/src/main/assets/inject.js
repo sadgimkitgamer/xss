@@ -139,32 +139,44 @@
     return false;
   };
 
-  /* ---------- 5. Auto-resume ----------
-   * If the music pauses without you asking (Android backgrounding, screen off),
-   * start it again. Pauses you make yourself – tapping pause in the app,
-   * notification, lock screen, headphones – are respected. */
-  let wantPlay = false, lastGesture = 0;
+  /* ---------- 5. Pauses caused by other audio ----------
+   * YouTube Music's player pauses by itself when another app takes the audio.
+   * That's respected, except: during voice chats (keep the music going), and
+   * for phone calls (resume once the call is over). */
+  let wantPlay = false, lastGesture = 0, interrupted = false, skipping = false;
+  const audioMode = () => {   // 0 normal, 1 ringing, 2 phone call, 3 voice chat
+    try { return window.EmberNative ? window.EmberNative.audioMode() : 0; } catch (e) { return 0; }
+  };
   ['pointerdown', 'touchstart', 'keydown', 'click'].forEach((t) =>
     document.addEventListener(t, () => { lastGesture = Date.now(); }, true));
-  document.addEventListener('play', () => { wantPlay = true; }, true);
+  document.addEventListener('play', () => { wantPlay = true; interrupted = false; }, true);
   document.addEventListener('pause', (e) => {
     const v = e.target;
-    log('pause event (tapped ' + (Date.now() - lastGesture) + 'ms ago, wantPlay=' + wantPlay + ', ad=' + mutedForAd + ')');
-    if (Date.now() - lastGesture < 1500 || mutedForAd || (v && v.ended)) {
-      if (!mutedForAd && !(v && v.ended)) wantPlay = false;
-      return;
-    }
-    if (wantPlay) setTimeout(resume, 400);
+    const byUser = Date.now() - lastGesture < 1500;
+    if (byUser) { wantPlay = false; interrupted = false; return; }
+    if (mutedForAd || (v && v.ended) || skipping || !wantPlay) return;
+    const mode = audioMode();
+    log('paused by the system (audio mode ' + mode + ')');
+    if (mode === 3) setTimeout(resume, 400);          // voice chat: keep playing
+    else if (mode === 1 || mode === 2) interrupted = true;   // phone call: resume afterwards
+    else wantPlay = false;                            // another app is playing: stay paused
   }, true);
   function resume() {
     const v = q('video');
-    if (wantPlay && v && v.paused && !v.ended && Date.now() - lastGesture > 1500) {
-      log('auto-resuming playback');
+    if (v && v.paused && !v.ended) {
+      log('resuming playback');
+      wantPlay = true;
       const p = v.play();
       if (p && p.catch) p.catch((err) => log('resume failed: ' + err));
     }
   }
-
+  function checkInterruption() {
+    if (interrupted && audioMode() === 0) {
+      interrupted = false;
+      log('call over -> resuming');
+      setTimeout(resume, 800);
+    }
+  }
 
   /* ---------- 6. Like & quick save ---------- */
   const cfg = (k) => {
@@ -374,7 +386,6 @@
    * The phone layout of YouTube Music often has no Next/Previous button in the
    * page until the full player is opened, so try several ways and check that
    * the song really changed before giving up. */
-  let skipping = false;
   async function skip(dir) {
     if (skipping) return;
     skipping = true;
@@ -629,7 +640,7 @@
   let tickCount = 0;
   function tick() {
     addTheme(); skipAds(); report();
-    if (++tickCount % 4 === 0) resume(); // every ~2s, as a backup
+    if (tickCount % 2 === 0) checkInterruption();
     if (tickCount % 20 === 0) {
       const v = q('video');
       log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +

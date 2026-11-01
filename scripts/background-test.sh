@@ -68,15 +68,10 @@ grep -v 'console error' "$OUT/ember.log" | grep -v 'state {' | tail -80
 echo "============================================================"
 echo "RESULT foreground=$FG($P1) background=$BG($P2) screenoff=$OFF($P3)"
 
-echo "--- audio focus:"
-grep -E 'audio focus|other audio|interruption|voice chat' "$OUT/ember.log" || echo "(none)"
-if grep -q 'audio focus change -[12]' "$OUT/ember.log"; then
-  grep -q 'other audio started -> pausing' "$OUT/ember.log" || { echo "FAIL: did not pause for other audio"; exit 1; }
-  [ "$CALL" = no ] || { echo "FAIL: kept playing during the call"; exit 1; }
-  [ "$AFTER" = yes ] || { echo "FAIL: did not resume after the call"; exit 1; }
-else
-  echo "WARN: emulator call did not take audio focus; focus handling not exercised"
-fi
+echo "--- other audio (phone call):"
+grep -E 'paused by the system|call over|resuming' "$OUT/ember.log" || echo "(none)"
+[ "$CALL" = no ] || { echo "FAIL: kept playing during the phone call"; exit 1; }
+[ "$AFTER" = yes ] || { echo "FAIL: did not resume after the phone call"; exit 1; }
 
 echo "--- song name shown:"
 LAST_TITLE=$(grep 'state {' "$OUT/ember.log" | tail -1 | sed -E 's/.*"title":"([^"]*)".*/\1/')
