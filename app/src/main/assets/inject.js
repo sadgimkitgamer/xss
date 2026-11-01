@@ -266,42 +266,108 @@
     }
   }
 
+  // Quick save goes to the playlist you picked in Ember (red playlist button), or to an
+  // automatically created private "Ember Saves" playlist if you haven't picked one.
   const SAVE_KEY = 'ember.savePlaylistId';
-  const SAVE_NAME = 'Ember Saves';
+  const SAVE_NAME_KEY = 'ember.savePlaylistName';
+  const SAVE_CHOSEN_KEY = 'ember.savePlaylistChosen';
+  const DEFAULT_NAME = 'Ember Saves';
+  const store = {
+    get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} },
+  };
   const savedIds = new Set();
+
+  async function addToPlaylist(playlistId, id) {
+    const r = await api('browse/edit_playlist', {
+      playlistId,
+      actions: [{ action: 'ACTION_ADD_VIDEO', addedVideoId: id, dedupeOption: 'DEDUPE_OPTION_SKIP' }],
+    });
+    if (r && r.status && r.status !== 'STATUS_SUCCEEDED') throw new Error(r.status);
+  }
+
   async function quickSave() {
     const id = currentVideoId();
     if (!id) return done('save', false, 'Nothing is playing');
+    const chosen = store.get(SAVE_CHOSEN_KEY) === '1';
+    let playlistId = store.get(SAVE_KEY);
+    let name = store.get(SAVE_NAME_KEY) || DEFAULT_NAME;
     try {
-      let playlistId = null;
-      try { playlistId = localStorage.getItem(SAVE_KEY); } catch (e) {}
       let added = false;
       if (playlistId) {
         try {
-          const r = await api('browse/edit_playlist', {
-            playlistId,
-            actions: [{ action: 'ACTION_ADD_VIDEO', addedVideoId: id, dedupeOption: 'DEDUPE_OPTION_SKIP' }],
-          });
-          added = !r || !r.status || r.status === 'STATUS_SUCCEEDED';
+          await addToPlaylist(playlistId, id);
+          added = true;
         } catch (e) {
-          if (e.message === 'signin') throw e;   // otherwise the playlist was probably deleted
+          // Your own playlist failing is an error; the auto playlist is simply recreated
+          if (e.message === 'signin' || chosen) throw e;
         }
       }
       if (!added) {
         const r = await api('playlist/create', {
-          title: SAVE_NAME,
+          title: DEFAULT_NAME,
           description: 'Songs quick-saved from Ember',
           privacyStatus: 'PRIVATE',
           videoIds: [id],
         });
         if (!r || !r.playlistId) throw new Error('could not create playlist');
-        try { localStorage.setItem(SAVE_KEY, r.playlistId); } catch (e) {}
+        store.set(SAVE_KEY, r.playlistId);
+        store.set(SAVE_NAME_KEY, DEFAULT_NAME);
+        name = DEFAULT_NAME;
       }
       savedIds.add(id);
-      done('save', true, 'Saved to "' + SAVE_NAME + '"');
+      done('save', true, 'Saved to "' + name + '"' + (chosen ? '' : ' · tap the red playlist button in Ember to pick your own'));
     } catch (e) {
-      done('save', false, errText(e, 'save songs'));
+      done('save', false, errText(e, 'save to "' + name + '"'));
     }
+  }
+
+  // Lists the playlists you can add songs to (same list as YouTube Music's "Save to playlist").
+  async function listPlaylists() {
+    const reply = (o) => { try { window.EmberNative && window.EmberNative.onPlaylists(JSON.stringify(o)); } catch (e) {} };
+    try {
+      const r = await api('playlist/get_add_to_playlist', {
+        videoIds: [currentVideoId() || 'dQw4w9WgXcQ'],
+        excludeWatchLater: true,
+      });
+      const out = [];
+      const seen = new Set();
+      (function walk(o) {
+        if (!o || typeof o !== 'object') return;
+        const p = o.playlistAddToOptionRenderer;
+        if (p && p.playlistId && !seen.has(p.playlistId)) {
+          seen.add(p.playlistId);
+          const t = p.title && (p.title.simpleText || (p.title.runs || []).map((x) => x.text).join(''));
+          out.push({ id: p.playlistId, title: t || p.playlistId });
+        }
+        for (const k in o) walk(o[k]);
+      })(r);
+      reply({
+        ok: true,
+        playlists: out,
+        current: store.get(SAVE_CHOSEN_KEY) === '1' ? store.get(SAVE_KEY) : '',
+      });
+    } catch (e) {
+      reply({ ok: false, error: errText(e, 'load your playlists') });
+    }
+  }
+
+  function setSavePlaylist(json) {
+    try {
+      const o = JSON.parse(json || '{}');
+      if (o.id) {
+        store.set(SAVE_KEY, o.id);
+        store.set(SAVE_NAME_KEY, o.title || 'your playlist');
+        store.set(SAVE_CHOSEN_KEY, '1');
+        savedIds.clear();
+        done('pick', true, 'Quick save → "' + (o.title || 'your playlist') + '"');
+      } else {
+        store.set(SAVE_CHOSEN_KEY, null);
+        if (store.get(SAVE_NAME_KEY) !== DEFAULT_NAME) { store.set(SAVE_KEY, null); store.set(SAVE_NAME_KEY, null); }
+        savedIds.clear();
+        done('pick', true, 'Quick save → "' + DEFAULT_NAME + '"');
+      }
+    } catch (e) {}
   }
 
   window.__emberControl = function (cmd, arg) {
@@ -332,6 +398,12 @@
         return;
       case 'save':
         quickSave();
+        return;
+      case 'playlists':
+        listPlaylists();
+        return;
+      case 'setSavePlaylist':
+        setSavePlaylist(arg);
         return;
       case 'seek':
         if (!call('seekto', { seekTime: arg / 1000 }) && v) v.currentTime = arg / 1000;

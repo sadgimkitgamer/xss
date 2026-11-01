@@ -71,6 +71,19 @@ final class PlayerBridge {
         });
     }
 
+    /** Calls window.__emberControl(cmd, "text") with a string argument. */
+    static void controlText(String cmd, String text) {
+        MAIN.post(() -> {
+            WebView w = webRef.get();
+            if (w == null) return;
+            w.evaluateJavascript("window.__emberControl && window.__emberControl('" + cmd + "',"
+                    + JSONObject.quote(text == null ? "" : text) + ")", null);
+        });
+    }
+
+    /** Receives the user's playlists (JSON) for the quick-save picker. */
+    static java.util.function.Consumer<String> playlistCallback;
+
     static void control(String cmd) {
         control(cmd, 0);
     }
@@ -89,6 +102,13 @@ final class PlayerBridge {
         @JavascriptInterface
         public void log(String msg) {
             Log.i(TAG, "page: " + msg);
+        }
+
+        @JavascriptInterface
+        public void onPlaylists(String json) {
+            MAIN.post(() -> {
+                if (playlistCallback != null) playlistCallback.accept(json);
+            });
         }
 
         @JavascriptInterface

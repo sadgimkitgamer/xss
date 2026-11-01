@@ -2,6 +2,7 @@ package com.ember.music;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.MutableContextWrapper;
 import android.content.pm.PackageInfo;
@@ -11,6 +12,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ClipDrawable;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -29,20 +31,25 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -106,6 +113,10 @@ public class MainActivity extends Activity {
                 for (int i = 1; i <= 6; i++) web.postDelayed(() -> PlayerBridge.control("play"), i * 5000L);
                 web.postDelayed(() -> PlayerBridge.control("like"), 40000L);
                 web.postDelayed(() -> PlayerBridge.control("save"), 45000L);
+                web.postDelayed(() -> {
+                    PlayerBridge.playlistCallback = json -> Log.i(PlayerBridge.TAG, "playlists " + json);
+                    PlayerBridge.control("playlists");
+                }, 50000L);
             }
         } else if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             web.loadUrl(HOME);
@@ -200,6 +211,21 @@ public class MainActivity extends Activity {
         progress.setProgressDrawable(layers);
         progress.setMax(100);
         root.addView(progress, new FrameLayout.LayoutParams(-1, dp(3), Gravity.TOP));
+
+        // Small button to choose which of your playlists "Quick save" adds songs to
+        ImageButton pick = new ImageButton(this);
+        pick.setImageResource(R.drawable.ic_save);
+        pick.setContentDescription("Choose quick-save playlist");
+        GradientDrawable round = new GradientDrawable();
+        round.setShape(GradientDrawable.OVAL);
+        round.setColor(ACCENT);
+        pick.setBackground(round);
+        pick.setElevation(dp(6));
+        pick.setAlpha(0.9f);
+        pick.setOnClickListener(v -> showPlaylistPicker());
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.BOTTOM | Gravity.END);
+        lp.setMargins(0, 0, dp(14), dp(150));
+        root.addView(pick, lp);
 
         // Splash shown until the first page load finishes
         LinearLayout sp = new LinearLayout(this);
@@ -334,6 +360,53 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+    }
+
+    private void showPlaylistPicker() {
+        Toast.makeText(this, "Loading your playlists…", Toast.LENGTH_SHORT).show();
+        PlayerBridge.playlistCallback = json -> {
+            PlayerBridge.playlistCallback = null;
+            if (isFinishing()) return;
+            try {
+                JSONObject o = new JSONObject(json);
+                if (!o.optBoolean("ok")) {
+                    Toast.makeText(this, o.optString("error", "Couldn't load playlists"), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                JSONArray arr = o.optJSONArray("playlists");
+                String current = o.optString("current");
+                List<String> ids = new ArrayList<>();
+                List<String> titles = new ArrayList<>();
+                ids.add("");
+                titles.add("Ember Saves (made automatically)");
+                int checked = 0;
+                for (int i = 0; arr != null && i < arr.length(); i++) {
+                    JSONObject pl = arr.getJSONObject(i);
+                    ids.add(pl.optString("id"));
+                    titles.add(pl.optString("title"));
+                    if (pl.optString("id").equals(current)) checked = ids.size() - 1;
+                }
+                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("Quick save adds songs to…")
+                        .setSingleChoiceItems(titles.toArray(new String[0]), checked, (d, which) -> {
+                            JSONObject pick = new JSONObject();
+                            try {
+                                if (which > 0) {
+                                    pick.put("id", ids.get(which));
+                                    pick.put("title", titles.get(which));
+                                }
+                            } catch (Exception ignored) {
+                            }
+                            PlayerBridge.controlText("setSavePlaylist", pick.toString());
+                            d.dismiss();
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Couldn't load playlists", Toast.LENGTH_LONG).show();
+            }
+        };
+        PlayerBridge.control("playlists");
     }
 
     private static boolean isYouTube(String url) {
