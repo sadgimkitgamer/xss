@@ -30,6 +30,12 @@ shot 1-foreground
 P1=$(pos); playing && FG=yes || FG=no
 echo "foreground: playing=$FG pos=$P1"
 
+echo "== Swipe down on the player"
+adb shell input swipe 160 170 160 560 250
+sleep 4
+shot 1b-after-swipe
+adb logcat -d -s Ember:I | grep -E 'swipe down|heartbeat' | tail -3
+
 echo "== Background: press HOME"
 adb shell input keyevent KEYCODE_HOME
 sleep 45
@@ -70,6 +76,10 @@ if grep -q 'audio focus change -[12]' "$OUT/ember.log"; then
 else
   echo "WARN: emulator call did not take audio focus; focus handling not exercised"
 fi
+
+echo "--- swipe down:"
+grep -E 'swipe down' "$OUT/ember.log" || echo "(none)"
+grep -q 'swipe down -> closed player' "$OUT/ember.log" || { echo "FAIL: swipe down did not close the player"; exit 1; }
 
 echo "--- like / save results:"
 grep -E 'action (like|save)|playlists \{' "$OUT/ember.log" || echo "(none)"

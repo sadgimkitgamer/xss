@@ -427,6 +427,85 @@
     }
   }
 
+  /* ---------- 8. Swipe down on the player to go back ---------- */
+  const layout = () => q('ytmusic-app-layout');
+  function playerUiState() {
+    const l = layout();
+    return l ? (l.getAttribute('player-ui-state') || l.getAttribute('player-ui-state_') || l.playerUiState || '') : '';
+  }
+  function playerOpen() {
+    const l = layout();
+    const st = String(playerUiState());
+    if (st) return st === 'PLAYER_PAGE_OPEN' || st === 'FULLSCREEN';
+    if (l && (l.hasAttribute('player-page-open') || l.playerPageOpen_)) return true;
+    const page = q('ytmusic-player-page');
+    return !!(page && page.hasAttribute('player-page-open'));
+  }
+  const page = () => q('ytmusic-player-page') || q('#player-page');
+  function setDrag(dy) {
+    const el = page();
+    if (!el) return;
+    el.style.transition = dy ? 'none' : 'transform .2s ease, opacity .2s ease';
+    el.style.transform = dy ? 'translateY(' + dy + 'px)' : '';
+    el.style.opacity = dy ? String(Math.max(0.4, 1 - dy / 900)) : '';
+  }
+  async function minimizePlayer() {
+    const methods = [
+      ['button', () => click('[aria-label="Minimize"], [aria-label="Close player"], [aria-label="Collapse"], ' +
+        '[aria-label="Minimise"], .player-minimize-button, ytmusic-player-page #minimize-button')],
+      ['player bar', () => click('ytmusic-player-bar .middle-controls .content-info-wrapper, ytmusic-player-bar .middle-controls')],
+      ['back', () => { if (history.length > 1) { history.back(); return true; } return false; }],
+      ['home', () => click('ytmusic-pivot-bar-item-renderer[tab-id="FEmusic_home"], ytmusic-guide-entry-renderer a[href="/"], a[href="/"]')],
+    ];
+    for (const [name, fn] of methods) {
+      let tried = false;
+      try { tried = !!fn(); } catch (e) {}
+      if (!tried) continue;
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 120));
+        if (!playerOpen()) { log('swipe down -> closed player via ' + name); return; }
+      }
+    }
+    log('swipe down -> could not close player (state=' + playerUiState() + ')');
+  }
+  (function swipeDown() {
+    let sx = 0, sy = 0, st = 0, active = false, dragging = false;
+    const blocked = (t) => t && t.closest && t.closest(
+      'tp-yt-paper-slider, #progress-bar, input, textarea, ytmusic-player-queue, #side-panel, .slider');
+    const scrolledParent = (t) => {
+      for (let el = t; el && el !== document.body; el = el.parentElement) {
+        if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight) return true;
+      }
+      return false;
+    };
+    document.addEventListener('touchstart', (e) => {
+      active = false; dragging = false;
+      if (e.touches.length !== 1 || !playerOpen()) return;
+      const t = e.target;
+      if (blocked(t) || scrolledParent(t)) return;
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now(); active = true;
+    }, { capture: true, passive: true });
+    document.addEventListener('touchmove', (e) => {
+      if (!active) return;
+      const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+      if (!dragging && (dy < -10 || Math.abs(dx) > Math.max(30, dy))) { active = false; setDrag(0); return; }
+      if (dy > 15) { dragging = true; setDrag(dy * 0.6); }
+    }, { capture: true, passive: true });
+    const end = (e) => {
+      if (!active) return;
+      active = false;
+      const p = (e.changedTouches && e.changedTouches[0]) || { clientX: sx, clientY: sy };
+      const dx = p.clientX - sx, dy = p.clientY - sy, dt = Date.now() - st;
+      const far = dy > Math.min(220, window.innerHeight * 0.3);
+      const flick = dy > 80 && dt < 350;
+      setDrag(0);
+      if (dragging && (far || flick) && Math.abs(dx) < dy * 0.7) minimizePlayer();
+      dragging = false;
+    };
+    document.addEventListener('touchend', end, { capture: true, passive: true });
+    document.addEventListener('touchcancel', () => { active = false; dragging = false; setDrag(0); }, { capture: true, passive: true });
+  })();
+
   window.__emberControl = function (cmd, arg) {
     const v = q('video');
     switch (cmd) {
@@ -508,7 +587,8 @@
     if (tickCount % 20 === 0) {
       const v = q('video');
       log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +
-        ' ready=' + v.readyState : '') + ' url=' + location.pathname + location.search);
+        ' ready=' + v.readyState : '') + ' url=' + location.pathname + location.search +
+        ' player=' + (playerOpen() ? 'open' : 'mini') + '(' + playerUiState() + ')');
     }
   }
   setInterval(tick, 500);
