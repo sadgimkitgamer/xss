@@ -63,7 +63,7 @@ echo "after call: playing=$AFTER"
 
 echo "== Skip (with the app in the background)"
 adb shell input keyevent KEYCODE_HOME
-sleep 25
+sleep 50
 
 adb logcat -d -s Ember:I > "$OUT/ember.log"
 adb logcat -d > "$OUT/full.log"

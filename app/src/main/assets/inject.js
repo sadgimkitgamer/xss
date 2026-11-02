@@ -393,6 +393,7 @@
   async function skip(dir) {
     if (skipping) return;
     skipping = true;
+    lastSkipAt = Date.now();
     try {
       const v = q('video');
       if (dir < 0 && v && v.currentTime > 4) {   // like every player: first tap restarts the song
@@ -627,7 +628,7 @@
   document.addEventListener('timeupdate', (e) => {
     const v = e.target;
     if (repeatMode !== 2 || mutedForAd || !v || !isFinite(v.duration) || v.duration < 5) return;
-    if (v.duration - v.currentTime < 0.45) restartForLoop(v);
+    if (v.duration - v.currentTime < 0.9) restartForLoop(v);
   }, true);
 
   // Playlist loop: know whether the current song is the playlist's last one, and if so
@@ -678,7 +679,24 @@
       }
     }, 2500);
   }
+  // Song loop safety net: if the song changed by itself anyway, go back to the looped one.
+  // (Picking or skipping to another song yourself makes that the looped song instead.)
+  let loopVideoId = null, lastSkipAt = 0;
   function maintainLoop() {
+    const vid = currentVideoId();
+    if (repeatMode === 2 && vid) {
+      const userChose = Date.now() - lastGesture < 6000 || Date.now() - lastSkipAt < 10000 || skipping;
+      if (!loopVideoId || userChose) loopVideoId = vid;
+      else if (vid !== loopVideoId) {
+        log('loop: song changed by itself -> back to the looped song');
+        const target = loopVideoId;
+        loopVideoId = null;
+        goToSong(target, (location.search.match(/[?&]list=([^&]+)/) || [])[1]);
+        return;
+      }
+    } else {
+      loopVideoId = null;
+    }
     if (repeatMode === 1 && !queueLoading && (!queueInfo || queueInfo.videoId !== currentVideoId())) refreshQueueInfo();
   }
   document.addEventListener('ended', (e) => {

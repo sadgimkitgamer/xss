@@ -126,7 +126,7 @@ public class MainActivity extends Activity {
                 }, 50000L);
                 // Skip while the app is in the background (the test presses Home at ~60s)
                 // Skip last (the test emulator can't play a second song, so it would spoil later checks)
-                web.postDelayed(() -> { Log.i(PlayerBridge.TAG, "TEST skip in background"); PlayerBridge.control("next"); }, 190000L);
+                web.postDelayed(() -> { Log.i(PlayerBridge.TAG, "TEST skip in background"); PlayerBridge.control("next"); }, 215000L);
                 // Loop: turn it on, jump near the end of the song, and see it start over
                 web.postDelayed(() -> PlayerBridge.control("repeat"), 97000L);   // -> loop playlist
                 web.postDelayed(() -> PlayerBridge.control("repeat"), 98000L);   // -> loop song
