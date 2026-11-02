@@ -65,11 +65,12 @@ public class MainActivity extends Activity {
             "adservice.google.com", "googletagmanager.com"
     };
     private static final String[] AD_PATHS = {
-            // (not "get_midroll_info": with stitched-in ads the player can wait on it forever)
-            "/pagead/", "/api/stats/ads", "/ptracking", "/youtubei/v1/log_event",
-            "/api/stats/qoe?adformat", "/pcs/activeview",
-            // telemetry that only slows things down
-            "/csi_204", "/generate_204", "/api/stats/atr", "/log?format"
+            // Only ad requests. Playback reports (ptracking, log_event, api/stats/atr…) must
+            // go through: YouTube uses them to check playback is real and may stop the stream
+            // (and skip the song) without them. Not get_midroll_info either: with stitched-in
+            // ads the player can wait on it forever.
+            "/pagead/", "/api/stats/ads", "/api/stats/qoe?adformat", "/pcs/activeview",
+            "/csi_204"
     };
 
     /**

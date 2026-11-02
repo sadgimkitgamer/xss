@@ -114,6 +114,23 @@
     const player = q('#movie_player, .html5-video-player');
     const video = q('video');
     let adOn = !!(player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting')));
+    // YouTube's "ad showing" marker can linger into the next song. Only treat it as an ad
+    // when the ad itself is also on screen (badge, countdown, skip button, ad overlay).
+    if (adOn) {
+      const adUi = q('.ytp-ad-player-overlay, .ytp-ad-player-overlay-layout, .ytp-ad-preview-container, ' +
+        '.ytp-ad-text, .ytp-ad-badge, .ytp-ad-simple-ad-badge, .ytp-ad-duration-remaining, ' +
+        '.ytp-ad-skip-button-container, .ytp-skip-ad, .ytp-ad-persistent-progress-bar-container, ' +
+        '.video-ads .ytp-ad-module *, ytmusic-player-bar .advertiser-name');
+      let apiSaysAd = false;
+      try { apiSaysAd = player.getAdState && player.getAdState() === 1; } catch (e) {}
+      if (!adUi && !apiSaysAd) {
+        if (!mutedForAd && adIgnoredFor !== 'logged:' + currentVideoId()) {
+          log('ad marker without an ad on screen -> leaving the song alone');
+          adIgnoredFor = 'logged:' + currentVideoId();
+        }
+        adOn = false;
+      }
+    }
     const vid = currentVideoId();
     if (adOn && adIgnoredFor === vid) adOn = false;
     if (adOn && video) {
@@ -124,7 +141,7 @@
         log('ad detected (clip length ' + Math.round(video.duration || 0) + 's) -> skipping');
       }
       click('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .videoAdUiSkipButton');
-      if (isFinite(video.duration) && video.duration > 0 && video.duration <= 90) {
+      if (isFinite(video.duration) && video.duration > 0 && video.duration <= 60) {
         // A separate, short ad clip: jump to its end
         if (video.currentTime < video.duration - 0.3) video.currentTime = video.duration - 0.1;
       } else {
