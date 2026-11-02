@@ -890,7 +890,9 @@
     const vid = currentVideoId();
     if (!vid || vid === qualityFor) return;
     const p = q('#movie_player');
-    if (!p) return;
+    const v = q('video');
+    // Only once the song is really playing, so it can never get in the way of loading
+    if (!p || !v || v.paused || v.readyState < 3 || v.currentTime < 3) return;
     try {
       if (p.setPlaybackQualityRange) p.setPlaybackQualityRange('tiny', 'tiny');
       if (p.setPlaybackQuality) p.setPlaybackQuality('tiny');
