@@ -32,7 +32,13 @@ P1=$(pos); playing && FG=yes || FG=no
 echo "foreground: playing=$FG pos=$P1"
 
 echo "== Swipe down on the player"
-adb shell input swipe 160 400 160 510 250   # short swipe starting low (song name / tabs)
+# Short swipe starting on the artist name under the song title (lower part of the player)
+shot 1a-before-swipe >/dev/null
+B=$(grep -o 'text="Rick Astley"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' "$OUT/1a-before-swipe.xml" | head -1 | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]')
+read X1 Y1 X2 Y2 <<<"$(echo "$B" | tr -c '0-9' ' ')"
+if [ -n "${Y2:-}" ]; then SX=$(( (X1 + X2) / 2 )); SY=$(( (Y1 + Y2) / 2 )); else SX=160; SY=330; fi
+echo "swiping from the artist name at $SX,$SY"
+adb shell input swipe $SX $SY $SX $((SY + 110)) 250
 sleep 4
 shot 1b-after-swipe
 adb logcat -d -s Ember:I | grep -E 'swipe|heartbeat' | tail -4
