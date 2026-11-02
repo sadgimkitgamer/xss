@@ -96,7 +96,9 @@ echo "after call: playing=$AFTER"
 
 echo "== Android kills the page's process while music plays in the background"
 adb root >/dev/null 2>&1; sleep 3
-RPID=$(adb shell ps -A -o PID,NAME | grep -i sandboxed_process | awk '{print $1}' | head -1)
+# Ember's page runs in a sandboxed process started after the app itself: pick the newest one
+APID=$(adb shell pidof com.ember.music | tr -d '\r' | awk '{print $1}')
+RPID=$(adb shell ps -A -o PID,NAME | grep -i sandboxed_process | awk -v a="${APID:-0}" '$1 > a {print $1}' | sort -n | tail -1)
 echo "page process: ${RPID:-not found}"
 if [ -n "$RPID" ]; then adb shell kill -9 "$RPID"; fi
 sleep 25
