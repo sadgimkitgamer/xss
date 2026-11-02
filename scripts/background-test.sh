@@ -142,8 +142,14 @@ if grep -q 'E Ember   : CRASH' "$OUT/full.log" 2>/dev/null || grep -q 'CRASH ' "
   echo "FAIL: Ember crashed"; grep -A20 'CRASH' "$OUT/ember.log" | head -30; exit 1
 fi
 
-if grep -q 'TransactionTooLargeException' "$OUT/full.log" 2>/dev/null; then
-  echo "FAIL: saved screen state too large (TransactionTooLargeException)"; exit 1
+# Only count it if it's Ember's own process (other apps on the emulator can hit it too)
+EPID=$(adb shell pidof com.ember.music | tr -d '\r' | awk '{print $1}')
+if [ -n "$EPID" ] && grep 'TransactionTooLargeException' "$OUT/full.log" 2>/dev/null | grep -q " $EPID "; then
+  echo "FAIL: Ember's saved screen state was too large (TransactionTooLargeException)"
+  grep -B2 -A4 'TransactionTooLargeException' "$OUT/full.log" | head -20; exit 1
+elif grep -q 'TransactionTooLargeException' "$OUT/full.log" 2>/dev/null; then
+  echo "NOTE: another app on the emulator hit TransactionTooLargeException:"
+  grep 'TransactionTooLargeException' "$OUT/full.log" | head -3
 fi
 
 echo "--- coming back to the app:"
