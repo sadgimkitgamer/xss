@@ -84,6 +84,8 @@ echo "title=\"$LAST_TITLE\""
 
 echo "--- loop:"
 grep -E "loop: |action repeat" "$OUT/ember.log" || echo "(none)"
+grep -q 'Looping this playlist' "$OUT/ember.log" || { echo "FAIL: loop didn't go to playlist mode first"; exit 1; }
+grep -q 'Looping this song' "$OUT/ember.log" || { echo "FAIL: loop didn't go to song mode second"; exit 1; }
 grep -q 'loop: restarted song' "$OUT/ember.log" || { echo "FAIL: loop did not restart the song"; exit 1; }
 
 echo "--- swipe down:"

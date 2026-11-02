@@ -610,8 +610,10 @@
     document.addEventListener('touchcancel', () => { active = false; dragging = false; setDrag(0); }, { capture: true, passive: true });
   })();
 
-  /* ---------- 9. Loop the current song ---------- */
-  let repeatOne = false;
+  /* ---------- 9. Loop: off → playlist → song ---------- */
+  const LOOP_NAMES = ['Loop off', '🔁 Looping this playlist', '🔂 Looping this song'];
+  let repeatMode = 0;   // 0 off, 1 playlist, 2 song (kept across page reloads)
+  try { repeatMode = +sessionStorage.getItem('ember.repeat') || 0; } catch (e) {}
   let loopGuard = 0;
   function restartForLoop(v) {
     if (Date.now() - loopGuard < 1500) return;
@@ -621,21 +623,83 @@
     if (p && p.catch) p.catch(() => {});
     log('loop: restarted song');
   }
-  // Jump back just before the end so YouTube Music never moves on to the next song…
+  // Song loop: jump back just before the end so YouTube Music never moves on…
   document.addEventListener('timeupdate', (e) => {
     const v = e.target;
-    if (!repeatOne || mutedForAd || !v || !isFinite(v.duration) || v.duration < 5) return;
+    if (repeatMode !== 2 || mutedForAd || !v || !isFinite(v.duration) || v.duration < 5) return;
     if (v.duration - v.currentTime < 0.45) restartForLoop(v);
   }, true);
-  // …and if it does reach the end, stop YouTube Music from seeing it.
+
+  // Playlist loop: know whether the current song is the playlist's last one, and if so
+  // go back to its first song when it ends (instead of YouTube Music's autoplay).
+  let queueInfo = null, queueLoading = false;
+  function collectQueue(r) {
+    const items = [];
+    (function walk(o) {
+      if (!o || typeof o !== 'object') return;
+      if (o.playlistPanelVideoRenderer && o.playlistPanelVideoRenderer.videoId) {
+        items.push(o.playlistPanelVideoRenderer);
+        return;
+      }
+      if (o.automixPreviewVideoRenderer) return;   // autoplay suggestions aren't the playlist
+      for (const k in o) walk(o[k]);
+    })(r);
+    return items;
+  }
+  async function refreshQueueInfo() {
+    const vid = currentVideoId();
+    const pid = (location.search.match(/[?&]list=([^&]+)/) || [])[1];
+    queueLoading = true;
+    try {
+      if (!vid || !pid || /^RD/.test(pid)) { queueInfo = { videoId: vid, last: false }; return; }
+      const items = collectQueue(await api('next', { videoId: vid, playlistId: pid }, { anonymous: true }));
+      const at = items.findIndex((v) => v.selected || v.videoId === vid);
+      queueInfo = {
+        videoId: vid, pid,
+        first: items[0] && items[0].videoId,
+        last: items.length > 1 && at === items.length - 1,
+      };
+      log('loop: song ' + (at + 1) + ' of ' + items.length + (queueInfo.last ? ' (last – will start over)' : ''));
+    } catch (e) {
+      queueInfo = { videoId: vid, last: false };
+    } finally {
+      queueLoading = false;
+    }
+  }
+  function goToSong(videoId, pid) {
+    const before = currentVideoId();
+    const endpoint = { watchEndpoint: Object.assign({ videoId }, pid ? { playlistId: pid } : {}) };
+    (q('ytmusic-app') || document.body).dispatchEvent(
+      new CustomEvent('yt-navigate', { bubbles: true, composed: true, detail: { endpoint } }));
+    setTimeout(() => {
+      if (currentVideoId() === before) {
+        try { sessionStorage.setItem('ember.autoplay', '1'); } catch (e) {}
+        location.assign('/watch?v=' + videoId + (pid ? '&list=' + encodeURIComponent(pid) : ''));
+      }
+    }, 2500);
+  }
+  function maintainLoop() {
+    if (repeatMode === 1 && !queueLoading && (!queueInfo || queueInfo.videoId !== currentVideoId())) refreshQueueInfo();
+  }
   document.addEventListener('ended', (e) => {
-    if (!repeatOne || mutedForAd) return;
-    e.stopImmediatePropagation();
-    restartForLoop(e.target);
+    if (mutedForAd) return;
+    if (repeatMode === 2) {                       // …and if it does reach the end, stop YouTube Music seeing it
+      e.stopImmediatePropagation();
+      restartForLoop(e.target);
+    } else if (repeatMode === 1 && queueInfo && queueInfo.last && queueInfo.first &&
+               queueInfo.videoId === currentVideoId()) {
+      e.stopImmediatePropagation();
+      log('loop: end of playlist -> back to the first song');
+      goToSong(queueInfo.first, queueInfo.pid);
+    }
   }, true);
+
   function toggleRepeat() {
-    repeatOne = !repeatOne;
-    done('repeat', true, repeatOne ? '🔁 Looping this song' : 'Loop off');
+    repeatMode = (repeatMode + 1) % 3;
+    try { sessionStorage.setItem('ember.repeat', String(repeatMode)); } catch (e) {}
+    queueInfo = null;
+    maintainLoop();
+    done('repeat', true, LOOP_NAMES[repeatMode]);
   }
 
   window.__emberControl = function (cmd, arg) {
@@ -715,7 +779,7 @@
     s.videoId = currentVideoId();
     s.liked = s.videoId ? isLiked(s.videoId) : false;
     s.saved = savedIds.has(s.videoId);
-    s.repeat = repeatOne;
+    s.repeat = repeatMode;
     const key = [s.title, s.artist, s.art, s.playing, s.dur, s.videoId, s.liked, s.saved, s.repeat].join('|');
     const now = Date.now();
     if (key !== lastKey || now - lastSent > 3000) {
@@ -751,6 +815,7 @@
     addTheme(); skipAds(); report();
     if (++tickCount % 2 === 0) checkInterruption();
     autoplayAfterSkip();
+    if (tickCount % 4 === 0) maintainLoop();
     if (tickCount % 20 === 0) {
       const v = q('video');
       log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +

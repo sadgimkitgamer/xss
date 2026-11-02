@@ -239,8 +239,10 @@ public class MusicService extends Service implements PlayerBridge.Listener {
                 return state.saved ? new Extra(ACTION_SAVE, "Saved", R.drawable.ic_saved)
                         : new Extra(ACTION_SAVE, "Save to playlist", R.drawable.ic_save);
             case "repeat":
-                return state.repeat ? new Extra(ACTION_REPEAT, "Looping song (tap to stop)", R.drawable.ic_repeat_one)
-                        : new Extra(ACTION_REPEAT, "Loop song", R.drawable.ic_repeat);
+                // Tapping cycles: off -> loop playlist -> loop song -> off
+                if (state.repeat == 1) return new Extra(ACTION_REPEAT, "Looping playlist (tap to loop the song)", R.drawable.ic_repeat);
+                if (state.repeat == 2) return new Extra(ACTION_REPEAT, "Looping song (tap to turn off)", R.drawable.ic_repeat_one);
+                return new Extra(ACTION_REPEAT, "Loop off (tap to loop the playlist)", R.drawable.ic_repeat_off);
             default:
                 return state.liked ? new Extra(ACTION_LIKE, "Unlike", R.drawable.ic_thumb_up_filled)
                         : new Extra(ACTION_LIKE, "Like", R.drawable.ic_thumb_up);

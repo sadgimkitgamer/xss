@@ -128,7 +128,8 @@ public class MainActivity extends Activity {
                 // Skip last (the test emulator can't play a second song, so it would spoil later checks)
                 web.postDelayed(() -> { Log.i(PlayerBridge.TAG, "TEST skip in background"); PlayerBridge.control("next"); }, 190000L);
                 // Loop: turn it on, jump near the end of the song, and see it start over
-                web.postDelayed(() -> PlayerBridge.control("repeat"), 98000L);
+                web.postDelayed(() -> PlayerBridge.control("repeat"), 97000L);   // -> loop playlist
+                web.postDelayed(() -> PlayerBridge.control("repeat"), 98000L);   // -> loop song
                 web.postDelayed(() -> PlayerBridge.control("seek",
                         Math.max(0, PlayerBridge.last.dur - 6000)), 100000L);
             }
@@ -395,7 +396,7 @@ public class MainActivity extends Activity {
     /** Lets you pick the two extra buttons (Like / Quick save / Loop) for the lock-screen player. */
     private void showButtonPicker() {
         String[] keys = {"like", "save", "repeat"};
-        String[] names = {"👍 Like", "Save to playlist", "🔁 Loop song"};
+        String[] names = {"👍 Like", "Save to playlist", "🔁 Loop (playlist / song)"};
         SharedPreferences prefs = getSharedPreferences(MusicService.PREFS, MODE_PRIVATE);
         List<String> current = new ArrayList<>(java.util.Arrays.asList(
                 prefs.getString(MusicService.PREF_EXTRAS, MusicService.DEFAULT_EXTRAS).split(",")));
