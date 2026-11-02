@@ -295,6 +295,9 @@ public class MainActivity extends Activity {
         cm.setAcceptCookie(true);
         cm.setAcceptThirdPartyCookies(web, true);
 
+        // Smoother scrolling: draw the page just outside the screen ahead of time
+        s.setOffscreenPreRaster(true);
+
         // Keep the page's renderer process at high priority even when not on screen
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         PackageInfo wv = WebView.getCurrentWebViewPackage();

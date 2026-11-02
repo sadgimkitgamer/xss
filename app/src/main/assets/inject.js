@@ -96,19 +96,43 @@
   const click = (s) => { const el = q(s); if (el) { el.click(); return true; } return false; };
   let mutedForAd = false;
 
+  let adSince = 0, adIgnoredFor = null;
+  function endAdHandling(video) {
+    mutedForAd = false;
+    adSince = 0;
+    if (video) { video.muted = false; video.playbackRate = 1; }
+  }
   function skipAds() {
     const player = q('#movie_player, .html5-video-player');
     const video = q('video');
-    const adOn = player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting'));
+    let adOn = !!(player && (player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting')));
+    const vid = currentVideoId();
+    if (adOn && adIgnoredFor === vid) adOn = false;
     if (adOn && video) {
-      if (!mutedForAd) { mutedForAd = true; video.muted = true; }
-      video.playbackRate = 16;
-      if (isFinite(video.duration) && video.duration > 0) video.currentTime = video.duration;
+      if (!mutedForAd) {
+        mutedForAd = true;
+        adSince = Date.now();
+        video.muted = true;
+        log('ad detected (clip length ' + Math.round(video.duration || 0) + 's) -> skipping');
+      }
       click('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .videoAdUiSkipButton');
-    } else if (mutedForAd && video) {
-      mutedForAd = false;
-      video.muted = false;
-      video.playbackRate = 1;
+      if (isFinite(video.duration) && video.duration > 0 && video.duration <= 90) {
+        // A separate, short ad clip: jump to its end
+        if (video.currentTime < video.duration - 0.3) video.currentTime = video.duration - 0.1;
+      } else {
+        // The ad is stitched into the song's own stream: never seek (that would skip the
+        // song) – just play the ad part fast and silent.
+        video.playbackRate = 8;
+      }
+      if (Date.now() - adSince > 60000) {
+        // Nothing is that long – YouTube's "ad" flag is stuck. Play normally.
+        log('ad flag stuck for 60s -> ignoring it for this song');
+        adIgnoredFor = vid;
+        endAdHandling(video);
+      }
+    } else if (mutedForAd) {
+      log('ad over');
+      endAdHandling(video);
     }
     // Promo banners, upsells and "are you still there?" prompts (CSS hides them already;
     // this just tidies up every few seconds)
@@ -859,9 +883,26 @@
     }
   }
 
+  // Music app: ask for the lowest video quality (audio is a separate stream and stays
+  // at full quality). Much less to download and decode = faster and lighter.
+  let qualityFor = null;
+  function preferLowVideo() {
+    const vid = currentVideoId();
+    if (!vid || vid === qualityFor) return;
+    const p = q('#movie_player');
+    if (!p) return;
+    try {
+      if (p.setPlaybackQualityRange) p.setPlaybackQualityRange('tiny', 'tiny');
+      if (p.setPlaybackQuality) p.setPlaybackQuality('tiny');
+      qualityFor = vid;
+      log('low video quality for ' + vid + ' (' + (p.getPlaybackQuality ? p.getPlaybackQuality() : '?') + ')');
+    } catch (e) {}
+  }
+
   let tickCount = 0;
   function tick() {
     tickCount++;
+    preferLowVideo();
     addTheme(); skipAds(); report();
     checkInterruption();
     autoplayAfterSkip();

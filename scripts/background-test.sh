@@ -6,6 +6,13 @@ APK="$1"
 OUT=test-out
 mkdir -p "$OUT"
 SONG="https://music.youtube.com/watch?v=dQw4w9WgXcQ"
+if [ -n "${SONG_QUERY:-}" ]; then
+  # Find a specific song (e.g. one a user reported) on YouTube
+  Q=$(echo "$SONG_QUERY" | sed 's/ /+/g')
+  ID=$(curl -sL -A "Mozilla/5.0" "https://www.youtube.com/results?search_query=$Q" | grep -o '"videoId":"[A-Za-z0-9_-]\{11\}"' | head -1 | cut -d'"' -f4)
+  echo "Song for \"$SONG_QUERY\": $ID"
+  [ -n "$ID" ] && SONG="https://music.youtube.com/watch?v=$ID"
+fi
 
 adb install -r "$APK"
 adb shell pm grant com.ember.music android.permission.POST_NOTIFICATIONS || true

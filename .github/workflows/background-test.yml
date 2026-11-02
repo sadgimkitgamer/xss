@@ -7,8 +7,15 @@ on:
 
 jobs:
   emulator:
+    name: emulator (${{ matrix.song || 'test song' }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        song: ['', 'Morganton hikari']
+    env:
+      SONG_QUERY: ${{ matrix.song }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,5 +48,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: background-test
+          name: background-test-${{ strategy.job-index }}
           path: test-out/
