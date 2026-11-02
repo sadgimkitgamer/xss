@@ -62,11 +62,13 @@ public class MainActivity extends Activity {
     private static final String[] AD_HOSTS = {
             "doubleclick.net", "googlesyndication.com", "googleadservices.com",
             "google-analytics.com", "googletagservices.com", "imasdk.googleapis.com",
-            "adservice.google.com"
+            "adservice.google.com", "googletagmanager.com"
     };
     private static final String[] AD_PATHS = {
             "/pagead/", "/api/stats/ads", "/ptracking", "/get_midroll_", "/youtubei/v1/log_event",
-            "/api/stats/qoe?adformat", "/pcs/activeview"
+            "/api/stats/qoe?adformat", "/pcs/activeview",
+            // telemetry that only slows things down
+            "/csi_204", "/generate_204", "/api/stats/atr", "/log?format"
     };
 
     /**
@@ -142,6 +144,8 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
         startForegroundService(new Intent(this, MusicService.class));
+        // Opened from the "Ember settings" app shortcut (long-press the app icon)
+        if (ACTION_SETTINGS.equals(getIntent().getAction())) web.postDelayed(this::showMenu, 600);
     }
 
     /** Opens youtube / music.youtube links shared to or opened with Ember. */
@@ -152,9 +156,12 @@ public class MainActivity extends Activity {
         return u.buildUpon().authority("music.youtube.com").build().toString();
     }
 
+    static final String ACTION_SETTINGS = "com.ember.music.SETTINGS";
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (ACTION_SETTINGS.equals(intent.getAction())) { showMenu(); return; }
         String link = linkFrom(intent);
         if (link != null) web.loadUrl(link);
     }
@@ -163,12 +170,14 @@ public class MainActivity extends Activity {
     protected void onStop() {
         super.onStop();
         Log.i(PlayerBridge.TAG, "activity stopped (app in background)");
+        PlayerBridge.setBackground(true);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
         Log.i(PlayerBridge.TAG, "activity started (app in foreground)");
+        PlayerBridge.setBackground(false);
     }
 
     /** WebView that never tells the page it went to the background. */
@@ -227,11 +236,7 @@ public class MainActivity extends Activity {
         progress.setMax(100);
         root.addView(progress, new FrameLayout.LayoutParams(-1, dp(3), Gravity.TOP));
 
-        // The fox: tap to play with it, drag to move it, long-press for Ember's settings
-        FoxView fox = new FoxView(this);
-        fox.setOnFoxLongPress(this::showMenu);
-        root.addView(fox, FoxView.defaultSize(this));
-        fox.restorePosition();
+
 
         // Splash shown until the first page load finishes
         LinearLayout sp = new LinearLayout(this);

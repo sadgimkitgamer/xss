@@ -20,8 +20,9 @@
     const nRAF = window.requestAnimationFrame.bind(window);
     const nCAF = window.cancelAnimationFrame.bind(window);
     const pending = new Map();
-    let nextId = 1;
+    let nextId = 1e9;   // never collides with the browser's own ids
     window.requestAnimationFrame = function (cb) {
+      if (!window.__emberBg) return nRAF(cb);   // on screen: the normal, fast path
       const id = nextId++;
       const entry = { raf: 0, timer: 0 };
       const run = (t) => {
@@ -38,7 +39,7 @@
     };
     window.cancelAnimationFrame = function (id) {
       const e = pending.get(id);
-      if (!e) return;
+      if (!e) return nCAF(id);
       pending.delete(id);
       nCAF(e.raf);
       clearTimeout(e.timer);
@@ -109,7 +110,9 @@
       video.muted = false;
       video.playbackRate = 1;
     }
-    // Promo banners, upsells and "are you still there?" prompts
+    // Promo banners, upsells and "are you still there?" prompts (CSS hides them already;
+    // this just tidies up every few seconds)
+    if (tickCount % 5 !== 0) return;
     document.querySelectorAll(
       'ytmusic-mealbar-promo-renderer, ytmusic-statement-banner-renderer, ytmusic-upsell-dialog-renderer, ' +
       'ytd-ad-slot-renderer, #player-ads, .ytp-ad-overlay-container'
@@ -118,12 +121,15 @@
   }
 
   /* ---------- 3. Theme ---------- */
+  let themed = false;
   function addTheme() {
-    if (document.getElementById('ember-theme') || !window.__emberCss) return;
+    if (themed || !window.__emberCss) return;
+    if (document.getElementById('ember-theme')) { themed = true; return; }
     const st = document.createElement('style');
     st.id = 'ember-theme';
     st.textContent = window.__emberCss;
     (document.head || document.documentElement).appendChild(st);
+    themed = true;
   }
 
   /* ---------- 4. Native bridge ---------- */
@@ -162,8 +168,27 @@
     log('paused by the system (audio mode ' + mode + ')');
     if (mode === 3) setTimeout(resume, 400);          // voice chat: keep playing
     else if (mode === 1 || mode === 2) interrupted = true;   // phone call: resume afterwards
-    else wantPlay = false;                            // another app is playing: stay paused
+    else {
+      // Was it another app, or just Android pausing us for being off-screen?
+      setTimeout(() => {
+        if (otherAudio()) { wantPlay = false; log('another app is playing -> staying paused'); }
+        else { log('nothing else is playing -> resuming'); resume(); }
+      }, 700);
+    }
   }, true);
+  const otherAudio = () => {
+    try { return !!(window.EmberNative && window.EmberNative.otherAudioPlaying()); } catch (e) { return false; }
+  };
+  // Safety net while off-screen: if the music got paused without you asking and nothing
+  // else is playing, start it again.
+  function backgroundWatchdog() {
+    if (!window.__emberBg || !wantPlay || skipping || interrupted || mutedForAd) return;
+    const v = q('video');
+    if (!v || !v.paused || v.ended || v.readyState < 2) return;
+    if (Date.now() - lastGesture < 3000 || audioMode() !== 0 || otherAudio()) return;
+    log('watchdog: paused in the background -> resuming');
+    resume();
+  }
   function resume() {
     const v = q('video');
     if (v && v.paused && !v.ended) {
@@ -282,7 +307,7 @@
     }
   }
 
-  // Quick save goes to the playlist you picked in Ember (long-press the fox), or to an
+  // Quick save goes to the playlist you picked in Ember settings (long-press the app icon), or to an
   // automatically created private "Ember Saves" playlist if you haven't picked one.
   const SAVE_KEY = 'ember.savePlaylistId';
   const SAVE_NAME_KEY = 'ember.savePlaylistName';
@@ -332,7 +357,7 @@
         name = DEFAULT_NAME;
       }
       savedIds.add(id);
-      done('save', true, 'Saved to "' + name + '"' + (chosen ? '' : ' · long-press the fox in Ember to pick your own'));
+      done('save', true, 'Saved to "' + name + '"' + (chosen ? '' : ' · long-press the Ember app icon → Ember settings to pick your own'));
     } catch (e) {
       done('save', false, errText(e, 'save to "' + name + '"'));
     }
@@ -830,17 +855,18 @@
 
   let tickCount = 0;
   function tick() {
+    tickCount++;
     addTheme(); skipAds(); report();
-    if (++tickCount % 2 === 0) checkInterruption();
+    checkInterruption();
     autoplayAfterSkip();
-    if (tickCount % 4 === 0) maintainLoop();
-    if (tickCount % 20 === 0) {
+    if (tickCount % 2 === 0) { maintainLoop(); backgroundWatchdog(); }
+    if (tickCount % 30 === 0) {
       const v = q('video');
       log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +
         ' ready=' + v.readyState : '') + ' url=' + location.pathname + location.search +
         ' player=' + (playerOpen() ? 'open' : 'mini') + '(' + playerUiState() + ')');
     }
   }
-  setInterval(tick, 500);
+  setInterval(tick, 1000);
   document.addEventListener('DOMContentLoaded', tick);
 })();

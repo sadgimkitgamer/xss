@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="settings"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_settings"
+        android:shortcutShortLabel="@string/shortcut_settings"
+        android:shortcutLongLabel="@string/shortcut_settings">
+        <intent
+            android:action="com.ember.music.SETTINGS"
+            android:targetPackage="com.ember.music"
+            android:targetClass="com.ember.music.MainActivity" />
+    </shortcut>
+</shortcuts>

@@ -76,6 +76,17 @@ final class PlayerBridge {
     }
 
     /** Calls window.__emberControl(cmd, "text") with a string argument. */
+    /** Lets the page know whether the app is on screen (it only needs some workarounds off-screen). */
+    static void setBackground(boolean bg) {
+        background = bg;
+        MAIN.post(() -> {
+            WebView w = webRef.get();
+            if (w != null) w.evaluateJavascript("window.__emberBg=" + bg, null);
+        });
+    }
+
+    static volatile boolean background;
+
     static void controlText(String cmd, String text) {
         MAIN.post(() -> {
             WebView w = webRef.get();
@@ -106,6 +117,17 @@ final class PlayerBridge {
         @JavascriptInterface
         public void log(String msg) {
             Log.i(TAG, "page: " + msg);
+        }
+
+        /** True while some app (not us – we're paused when this is asked) is playing audio. */
+        @JavascriptInterface
+        public boolean otherAudioPlaying() {
+            return audio != null && audio.isMusicActive();
+        }
+
+        @JavascriptInterface
+        public boolean inBackground() {
+            return background;
         }
 
         /** 0 normal, 1 ringing, 2 phone call, 3 voice chat (Discord etc.). */
