@@ -80,6 +80,8 @@ public class MainActivity extends Activity {
     private static String injectJs;
 
     private static int consoleErrors;
+    /** Whether the shared player has finished loading YouTube Music at least once. */
+    private static boolean playerEverLoaded;
     private static boolean noAdBlock;
     private PlayerWebView web;
     private ProgressBar progress;
@@ -95,9 +97,10 @@ public class MainActivity extends Activity {
         if (injectJs == null) injectJs = (noAdBlock ? "window.__emberNoAdBlock=true;\n" : "") + buildInjectJs();
         PlayerBridge.closing = false;
 
-        // Only carry the old player over if music is playing; otherwise a fresh one is safer
-        // (re-attaching a player that was still loading could leave the page frozen).
-        if (shared != null && !PlayerBridge.last.playing) destroyPlayer();
+        // Keep the existing player (your page, queue and song) whenever the screen comes back.
+        // Only a player that never finished its first page load is replaced: re-attaching
+        // one of those right at launch could leave the page frozen.
+        if (shared != null && !playerEverLoaded) destroyPlayer();
         boolean reused = shared != null;
         Log.i(PlayerBridge.TAG, "activity created (reusing player: " + reused + ")");
         if (reused) {
@@ -216,6 +219,7 @@ public class MainActivity extends Activity {
         shared.stopLoading();
         shared.destroy();
         shared = null;
+        playerEverLoaded = false;
     }
 
     private View buildLayout(boolean reused) {
@@ -350,6 +354,7 @@ public class MainActivity extends Activity {
                     if (shared.getParent() != null) ((ViewGroup) shared.getParent()).removeView(shared);
                     shared.destroy();
                     shared = null;
+                    playerEverLoaded = false;
                 }
                 recreate();
                 return true;
@@ -363,6 +368,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (isYouTube(url)) playerEverLoaded = true;
                 Log.i(PlayerBridge.TAG, "page finished " + url);
                 if (isYouTube(url)) view.evaluateJavascript(injectJs, null);
                 hideSplash();
@@ -555,8 +561,8 @@ public class MainActivity extends Activity {
         if (stopEverything) {
             stopService(new Intent(this, MusicService.class));
             destroyPlayer();
-        } else if (!PlayerBridge.last.playing) {
-            destroyPlayer();   // nothing to keep alive; the next screen makes a fresh player
+        } else if (!playerEverLoaded) {
+            destroyPlayer();   // still on its first load: the next screen starts a fresh one
         } else if (web != null) {
             // Keep the music going: park the player until the screen comes back
             if (web.getParent() != null) ((ViewGroup) web.getParent()).removeView(web);

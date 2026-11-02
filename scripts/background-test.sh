@@ -37,7 +37,8 @@ sleep 4
 shot 1b-after-swipe
 adb logcat -d -s Ember:I | grep -E 'swipe|heartbeat' | tail -4
 
-echo "== Background: press HOME"
+echo "== Background: press HOME (with 'Don't keep activities' on, like aggressive phones)"
+adb shell settings put global always_finish_activities 1
 adb shell input keyevent KEYCODE_HOME
 sleep 45
 shot 2-home
@@ -65,6 +66,14 @@ echo "== Skip (with the app in the background)"
 adb shell input keyevent KEYCODE_HOME
 sleep 50
 
+echo "== Back to the app"
+MARK=$(adb logcat -d -s Ember:I | wc -l)
+adb shell am start -n com.ember.music/.MainActivity >/dev/null
+sleep 10
+adb logcat -d -s Ember:I | tail -n +$((MARK + 1)) > "$OUT/return.log"
+adb shell settings put global always_finish_activities 0
+shot 4-returned
+
 adb logcat -d -s Ember:I > "$OUT/ember.log"
 adb logcat -d > "$OUT/full.log"
 echo "================ Ember log (last 120 lines) ================"
@@ -76,6 +85,12 @@ echo "--- other audio (phone call):"
 grep -E 'paused by the system|call over|resuming' "$OUT/ember.log" || echo "(none)"
 [ "$CALL" = no ] || { echo "FAIL: kept playing during the phone call"; exit 1; }
 [ "$AFTER" = yes ] || { echo "FAIL: did not resume after the phone call"; exit 1; }
+
+echo "--- coming back to the app:"
+grep -E 'activity|page started|destroying player' "$OUT/return.log" || echo "(no screen changes)"
+if grep -q 'page started' "$OUT/return.log" || grep -q 'destroying player' "$OUT/return.log"; then
+  echo "FAIL: the app reset when coming back"; exit 1
+fi
 
 echo "--- song name shown:"
 LAST_TITLE=$(grep 'state {' "$OUT/ember.log" | tail -1 | sed -E 's/.*"title":"([^"]*)".*/\1/')
