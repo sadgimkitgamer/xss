@@ -209,10 +209,11 @@
     return 'SAPISIDHASH ' + ts + '_' + hex;
   }
   // Calls YouTube Music's own API as the signed-in user.
-  async function api(endpoint, body) {
+  async function api(endpoint, body, opts) {
+    const needAuth = !(opts && opts.anonymous);
     const auth = await authHeader();
     const context = cfg('INNERTUBE_CONTEXT');
-    if (!auth || cfg('LOGGED_IN') === false) throw new Error('signin');
+    if (needAuth && (!auth || cfg('LOGGED_IN') === false)) throw new Error('signin');
     if (!context) throw new Error('page not ready');
     const key = cfg('INNERTUBE_API_KEY');
     const res = await fetch('/youtubei/v1/' + endpoint + '?prettyPrint=false' + (key ? '&key=' + key : ''), {
@@ -220,7 +221,7 @@
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': auth,
+        ...(auth ? { 'Authorization': auth } : {}),
         'X-Origin': location.origin,
         'X-Goog-AuthUser': String(cfg('SESSION_INDEX') || 0),
         'X-Youtube-Client-Name': String(cfg('INNERTUBE_CONTEXT_CLIENT_NAME') || 67),
@@ -413,14 +414,15 @@
       // the button, and minimize it again.
       const expandAndPress = () => {
         if (playerOpen()) return false;
-        if (!click('ytmusic-player-bar .middle-controls .content-info-wrapper, ytmusic-player-bar .middle-controls, ytmusic-player-bar')) {
+        const bar = 'ytmusic-player-bar .middle-controls .content-info-wrapper, ytmusic-player-bar .middle-controls, ytmusic-player-bar';
+        if (!(tapEl(bar) || click(bar))) {
           log('skip: no player bar to open');
           return false;
         }
         return new Promise(async (resolve) => {
           for (let i = 0; i < 15 && !playerOpen(); i++) await new Promise((r) => setTimeout(r, 100));
           await new Promise((r) => setTimeout(r, 250));
-          const ok = click(sel);
+          const ok = playerOpen() && (click(sel) || tapEl(sel));
           log('skip: opened player=' + playerOpen() + ', pressed button=' + ok);
           setTimeout(() => click('[aria-label="Minimize player page"], [aria-label="Minimise player page"], [aria-label="Minimize"]'), 1200);
           resolve(ok);
@@ -446,12 +448,52 @@
           return false;
         }
       };
+      // Polymer buttons react to "tap" gestures, which a plain click() doesn't always produce
+      const tapEl = (selector) => {
+        const el = q(selector);
+        if (!el) return false;
+        el.dispatchEvent(new CustomEvent('tap', { bubbles: true, composed: true, detail: { x: 0, y: 0 } }));
+        return true;
+      };
+      // Ask YouTube Music for the queue around the current song and go to the neighbour.
+      const askAndGo = async () => {
+        const vid = currentVideoId();
+        if (!vid) return false;
+        const pid = (location.search.match(/[?&]list=([^&]+)/) || [])[1] ||
+          (player && player.getPlaylistId && player.getPlaylistId()) || ('RDAMVM' + vid);
+        const r = await api('next', { videoId: vid, playlistId: pid, isAudioOnly: true }, { anonymous: true });
+        const items = [];
+        (function walk(o) {
+          if (!o || typeof o !== 'object') return;
+          const v = o.playlistPanelVideoRenderer;
+          if (v && v.videoId) items.push(v);
+          for (const k in o) if (k !== 'playlistPanelVideoRenderer') walk(o[k]);
+          if (v) for (const k in v) walk(v[k]);
+        })(r);
+        let at = items.findIndex((v) => v.selected || v.videoId === vid);
+        const target = items[at + dir] || (dir > 0 && at < 0 ? items.find((v) => v.videoId !== vid) : null);
+        log('skip: queue from YouTube has ' + items.length + ' songs, current #' + (at + 1) + ' -> ' + (target && target.videoId));
+        if (!target) return false;
+        const endpoint = { watchEndpoint: { videoId: target.videoId, playlistId: pid } };
+        const app = q('ytmusic-app') || document.body;
+        app.dispatchEvent(new CustomEvent('yt-navigate', { bubbles: true, composed: true, detail: { endpoint } }));
+        // If YouTube Music ignored the in-page navigation, load the song's page directly
+        setTimeout(() => {
+          if (currentVideoId() === vid) {
+            log('skip: loading the next song page');
+            try { sessionStorage.setItem('ember.autoplay', '1'); } catch (e) {}
+            location.assign('/watch?v=' + target.videoId + '&list=' + encodeURIComponent(pid));
+          }
+        }, 2500);
+        return true;
+      };
       const methods = [
         ['media session', () => call(dir > 0 ? 'nexttrack' : 'previoustrack')],
-        ['button', () => click(sel)],
+        ['button', () => playerOpen() && click(sel)],
+        ['button tap', () => tapEl(sel)],
         ['open player + button', expandAndPress],
         ['queue navigation', navigateInQueue],
-        ['queue', () => { const el = queueItem(); if (!el) return false; el.click(); return true; }],
+        ['ask youtube for the queue', askAndGo],
       ];
       for (const [name, fn] of methods) {
         let tried = false;
@@ -680,10 +722,23 @@
     document.addEventListener(t, () => log('media ' + t), true));
   window.addEventListener('load', () => log('loaded ' + location.href + ' "' + document.title + '"'));
 
+  let pendingAutoplay = false;
+  try { pendingAutoplay = sessionStorage.getItem('ember.autoplay') === '1'; sessionStorage.removeItem('ember.autoplay'); } catch (e) {}
+  function autoplayAfterSkip() {
+    if (!pendingAutoplay) return;
+    const v = q('video');
+    if (v && v.readyState >= 2) {
+      pendingAutoplay = false;
+      if (v.paused) { wantPlay = true; const p = v.play(); if (p && p.catch) p.catch(() => {}); }
+      log('skip: playing the new song');
+    }
+  }
+
   let tickCount = 0;
   function tick() {
     addTheme(); skipAds(); report();
     if (++tickCount % 2 === 0) checkInterruption();
+    autoplayAfterSkip();
     if (tickCount % 20 === 0) {
       const v = q('video');
       log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +

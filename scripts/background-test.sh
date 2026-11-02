@@ -88,8 +88,8 @@ grep -q 'swipe down -> closed player' "$OUT/ember.log" || { echo "FAIL: swipe do
 
 echo "--- like / save results:"
 grep -E 'action (like|save)|playlists \{' "$OUT/ember.log" || echo "(none)"
-grep -E 'page: (next|prev|new song)' "$OUT/ember.log" || true
-grep -q 'page: new song playing' "$OUT/ember.log" || { echo "FAIL: skip to next song did not work"; exit 1; }
+grep -E 'page: (next|prev|new song|skip)' "$OUT/ember.log" || true
+grep -qE 'page: (new song playing|skip: playing the new song)' "$OUT/ember.log" || { echo "FAIL: skip to next song did not work"; exit 1; }
 grep -q 'playlists {' "$OUT/ember.log" || { echo "FAIL: playlist picker got no answer"; exit 1; }
 grep -qE 'action like ' "$OUT/ember.log" || { echo "FAIL: like button did nothing"; exit 1; }
 grep -qE 'action save ' "$OUT/ember.log" || { echo "FAIL: save button did nothing"; exit 1; }
