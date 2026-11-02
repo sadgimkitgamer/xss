@@ -83,6 +83,7 @@ public class MainActivity extends Activity {
     private static int consoleErrors;
     /** Whether the shared player has finished loading YouTube Music at least once. */
     private static boolean playerEverLoaded;
+    private static String lastUrl;
     private static boolean noAdBlock;
     private PlayerWebView web;
     private ProgressBar progress;
@@ -147,9 +148,65 @@ public class MainActivity extends Activity {
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
-        startForegroundService(new Intent(this, MusicService.class));
+        // Start the playback service if it isn't running (never crash over it)
+        if (!MusicService.running) {
+            try {
+                startForegroundService(new Intent(this, MusicService.class));
+            } catch (Exception e) {
+                Log.w(PlayerBridge.TAG, "couldn't start the playback service: " + e);
+            }
+        }
+        showLastCrash();
         // Opened from the "Ember settings" app shortcut (long-press the app icon)
         if (ACTION_SETTINGS.equals(getIntent().getAction())) web.postDelayed(this::showMenu, 600);
+    }
+
+    /**
+     * Android killed the page's process (usually to free memory while a heavy video plays in
+     * the background). Build a new player in place – without rebuilding the screen, which
+     * isn't allowed from the background – and continue the song where it was.
+     */
+    private void rebuildPlayer() {
+        PlayerBridge.State st = PlayerBridge.last;
+        boolean wasPlaying = st.playing;
+        ViewGroup parent = shared != null ? (ViewGroup) shared.getParent() : null;
+        int index = parent != null ? parent.indexOfChild(shared) : -1;
+        if (shared != null) {
+            if (parent != null) parent.removeView(shared);
+            shared.destroy();
+        }
+        playerEverLoaded = false;
+        web = shared = new PlayerWebView(new MutableContextWrapper(isDestroyed() ? getApplicationContext() : this));
+        configurePlayer(web);
+        attachClients();
+        PlayerBridge.attach(this, web);
+        if (parent != null) parent.addView(web, Math.max(0, index), new FrameLayout.LayoutParams(-1, -1));
+        String target;
+        if (st.videoId != null && !st.videoId.isEmpty()) {
+            target = "https://music.youtube.com/watch?v=" + st.videoId + "&t=" + (st.pos / 1000) + "s";
+        } else {
+            target = lastUrl != null ? lastUrl : HOME;
+        }
+        if (wasPlaying) target += (target.contains("?") ? "&" : "?") + "ember_autoplay=1";
+        Log.i(PlayerBridge.TAG, "player rebuilt -> " + target);
+        web.loadUrl(target);
+    }
+
+    /** Shows what went wrong if Ember crashed last time, so it can be reported. */
+    private void showLastCrash() {
+        String report = EmberApp.takeLastCrash(this);
+        if (report == null) return;
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Ember crashed last time")
+                .setMessage("Sorry! Tap Copy and paste this to whoever is fixing Ember:\n\n"
+                        + (report.length() > 1500 ? report.substring(0, 1500) + "…" : report))
+                .setPositiveButton("Copy", (d, w) -> {
+                    android.content.ClipboardManager cb = getSystemService(android.content.ClipboardManager.class);
+                    cb.setPrimaryClip(android.content.ClipData.newPlainText("Ember crash", report));
+                    Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     /** Opens youtube / music.youtube links shared to or opened with Ember. */
@@ -356,19 +413,14 @@ public class MainActivity extends Activity {
             @Override
             public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 // The page crashed: start a fresh player instead of letting the app crash
-                Log.w(PlayerBridge.TAG, "player page crashed (" + (detail.didCrash() ? "crash" : "killed") + ") -> restarting");
-                if (view == shared) {
-                    if (shared.getParent() != null) ((ViewGroup) shared.getParent()).removeView(shared);
-                    shared.destroy();
-                    shared = null;
-                    playerEverLoaded = false;
-                }
-                recreate();
+                Log.w(PlayerBridge.TAG, "player page crashed (" + (detail.didCrash() ? "crash" : "killed") + ") -> rebuilding the player");
+                if (view == shared) rebuildPlayer();
                 return true;
             }
 
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                if (isYouTube(url)) lastUrl = url;
                 Log.i(PlayerBridge.TAG, "page started " + url);
                 if (!docStartScript && isYouTube(url)) view.evaluateJavascript(injectJs, null);
             }

@@ -881,6 +881,7 @@
 
   let pendingAutoplay = false;
   try { pendingAutoplay = sessionStorage.getItem('ember.autoplay') === '1'; sessionStorage.removeItem('ember.autoplay'); } catch (e) {}
+  if (/[?&]ember_autoplay=1/.test(location.search)) pendingAutoplay = true;   // after the player was rebuilt
   function autoplayAfterSkip() {
     if (!pendingAutoplay) return;
     const v = q('video');

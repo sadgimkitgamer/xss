@@ -94,6 +94,15 @@ sleep 15
 playing && AFTER=yes || AFTER=no
 echo "after call: playing=$AFTER"
 
+echo "== Android kills the page's process while music plays in the background"
+adb root >/dev/null 2>&1; sleep 3
+RPID=$(adb shell ps -A -o PID,NAME | grep -i sandboxed_process | awk '{print $1}' | head -1)
+echo "page process: ${RPID:-not found}"
+if [ -n "$RPID" ]; then adb shell kill -9 "$RPID"; fi
+sleep 25
+APP_PID=$(adb shell pidof com.ember.music || true)
+echo "app process after page was killed: ${APP_PID:-GONE}"
+
 echo "== Skip (with the app in the background)"
 adb shell input keyevent KEYCODE_HOME
 sleep 50
@@ -117,6 +126,16 @@ echo "--- other audio (phone call):"
 grep -E 'paused by the system|call over|resuming' "$OUT/ember.log" || echo "(none)"
 [ "$CALL" = no ] || { echo "FAIL: kept playing during the phone call"; exit 1; }
 [ "$AFTER" = yes ] || { echo "FAIL: did not resume after the phone call"; exit 1; }
+
+echo "--- page process killed:"
+grep -E 'player page crashed|player rebuilt|CRASH' "$OUT/ember.log" || echo "(none)"
+[ -n "${APP_PID:-}" ] || { echo "FAIL: the app died when Android killed the page"; exit 1; }
+if [ -n "${RPID:-}" ]; then
+  grep -q 'player rebuilt' "$OUT/ember.log" || { echo "FAIL: the player wasn't rebuilt"; exit 1; }
+fi
+if grep -q 'E Ember   : CRASH' "$OUT/full.log" 2>/dev/null || grep -q 'CRASH ' "$OUT/ember.log"; then
+  echo "FAIL: Ember crashed"; grep -A20 'CRASH' "$OUT/ember.log" | head -30; exit 1
+fi
 
 echo "--- coming back to the app:"
 grep -E 'activity|page started|destroying player' "$OUT/return.log" || echo "(no screen changes)"

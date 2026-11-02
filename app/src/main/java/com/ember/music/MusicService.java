@@ -38,6 +38,9 @@ import java.util.concurrent.Executors;
  */
 public class MusicService extends Service implements PlayerBridge.Listener {
 
+    /** True while the service is alive (so the screen doesn't try to start it twice). */
+    static volatile boolean running;
+
     static final String ACTION_TOGGLE = "com.ember.music.TOGGLE";
     static final String ACTION_NEXT = "com.ember.music.NEXT";
     static final String ACTION_PREV = "com.ember.music.PREV";
@@ -79,6 +82,7 @@ public class MusicService extends Service implements PlayerBridge.Listener {
     @Override
     public void onCreate() {
         super.onCreate();
+        running = true;
         nm = getSystemService(NotificationManager.class);
         NotificationChannel ch = new NotificationChannel(CHANNEL, "Playback", NotificationManager.IMPORTANCE_LOW);
         ch.setShowBadge(false);
@@ -334,6 +338,7 @@ public class MusicService extends Service implements PlayerBridge.Listener {
 
     @Override
     public void onDestroy() {
+        running = false;
         PlayerBridge.setListener(null);
         try { unregisterReceiver(noisy); } catch (Exception ignored) { }
         releaseLocks();
