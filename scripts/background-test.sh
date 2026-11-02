@@ -32,6 +32,19 @@ P1=$(pos); playing && FG=yes || FG=no
 echo "foreground: playing=$FG pos=$P1"
 
 echo "== Swipe down on the player"
+# Dismiss emulator "X isn't responding" popups that would cover the screen
+dismiss_popups() {
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb shell cat /sdcard/ui.xml > "$OUT/popup.xml"
+  if grep -q "isn't responding" "$OUT/popup.xml"; then
+    WB=$(grep -o 'text="Wait"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' "$OUT/popup.xml" | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' | head -1)
+    read A B C D <<<"$(echo "$WB" | tr -c '0-9' ' ')"
+    echo "dismissing a system popup"
+    adb shell input tap $(( (A + C) / 2 )) $(( (B + D) / 2 ))
+    sleep 2
+  fi
+}
+dismiss_popups
+
 # Short swipe starting on the artist name under the song title (lower part of the player)
 shot 1a-before-swipe >/dev/null
 B=$(grep -o 'text="Rick Astley"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' "$OUT/1a-before-swipe.xml" | head -1 | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]')
