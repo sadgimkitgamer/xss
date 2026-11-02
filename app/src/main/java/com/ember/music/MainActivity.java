@@ -339,6 +339,12 @@ public class MainActivity extends Activity {
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
                 if (req.isForMainFrame()) {
                     Log.w(PlayerBridge.TAG, "page error " + err.getErrorCode() + " " + err.getDescription() + " " + req.getUrl());
+                    // Offline / network not ready: try again in a few seconds instead of
+                    // leaving an error page up
+                    String url = req.getUrl().toString();
+                    view.postDelayed(() -> {
+                        if (shared == view) { Log.i(PlayerBridge.TAG, "retrying " + url); view.loadUrl(url); }
+                    }, 4000);
                 }
             }
 

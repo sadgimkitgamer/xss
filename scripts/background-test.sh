@@ -14,6 +14,12 @@ if [ -n "${SONG_QUERY:-}" ]; then
   [ -n "$ID" ] && SONG="https://music.youtube.com/watch?v=$ID"
 fi
 
+# Wait until the emulator is actually online (right after boot it often isn't yet)
+for i in $(seq 1 30); do
+  adb shell ping -c 1 -W 2 music.youtube.com >/dev/null 2>&1 && { echo "network ready"; break; }
+  sleep 2
+done
+
 adb install -r "$APK"
 adb shell pm grant com.ember.music android.permission.POST_NOTIFICATIONS || true
 adb logcat -G 16M || true

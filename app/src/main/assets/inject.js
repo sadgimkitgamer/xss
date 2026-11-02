@@ -911,8 +911,16 @@
     if (tickCount % 2 === 0) { maintainLoop(); backgroundWatchdog(); }
     if (tickCount % 30 === 0) {
       const v = q('video');
+      let ps = '';
+      try {
+        const pr = q('#movie_player') && q('#movie_player').getPlayerResponse && q('#movie_player').getPlayerResponse();
+        if (pr && pr.playabilityStatus) ps = ' playability=' + pr.playabilityStatus.status +
+          (pr.playabilityStatus.reason ? ' (' + pr.playabilityStatus.reason + ')' : '');
+        const st = q('#movie_player') && q('#movie_player').getPlayerState && q('#movie_player').getPlayerState();
+        ps += ' state=' + st;
+      } catch (e) {}
       log('heartbeat video=' + !!v + (v ? ' paused=' + v.paused + ' t=' + v.currentTime.toFixed(1) +
-        ' ready=' + v.readyState : '') + ' url=' + location.pathname + location.search +
+        ' ready=' + v.readyState : '') + ps + ' url=' + location.pathname + location.search +
         ' player=' + (playerOpen() ? 'open' : 'mini') + '(' + playerUiState() + ')');
     }
   }
