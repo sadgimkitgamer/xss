@@ -104,6 +104,7 @@ grep -qE 'action like ' "$OUT/ember.log" || { echo "FAIL: like button did nothin
 grep -qE 'action save ' "$OUT/ember.log" || { echo "FAIL: save button did nothing"; exit 1; }
 
 [ "$FG" = yes ] || { echo "FAIL: did not start playing in the foreground"; exit 1; }
-[ "$BG" = yes ] && [ "${P2:-0}" -gt "${P1:-0}" ] || { echo "FAIL: stopped in background"; exit 1; }
-[ "$OFF" = yes ] && [ "${P3:-0}" -gt "${P2:-0}" ] || { echo "FAIL: stopped with screen off"; exit 1; }
+# Position must keep changing (it can go back to 0 when the Loop check restarts the song)
+[ "$BG" = yes ] && [ "${P2:-0}" != "${P1:-0}" ] || { echo "FAIL: stopped in background"; exit 1; }
+[ "$OFF" = yes ] && [ "${P3:-0}" != "${P2:-0}" ] || { echo "FAIL: stopped with screen off"; exit 1; }
 echo "PASS"
