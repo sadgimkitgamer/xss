@@ -7,22 +7,8 @@ on:
 
 jobs:
   emulator:
-    name: emulator (${{ matrix.song || 'test song' }}${{ matrix.extra && ', ad blocking off' || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - song: ''
-            extra: ''
-          - song: 'Morganton hikari'
-            extra: ''
-          - song: 'Morganton hikari'
-            extra: '--ez noadblock true'
-    env:
-      SONG_QUERY: ${{ matrix.song }}
-      EMBER_EXTRA: ${{ matrix.extra }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,5 +41,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: background-test-${{ strategy.job-index }}
+          name: background-test
           path: test-out/

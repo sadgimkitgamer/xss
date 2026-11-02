@@ -901,10 +901,31 @@
     } catch (e) {}
   }
 
+  // If YouTube refuses a song (not available, sign-in / bot check, age limit…), say why
+  // instead of sitting there silently.
+  let refusedNoted = null, refusedSince = 0, refusedFor = null;
+  function checkPlayable() {
+    let st = null;
+    try {
+      const p = q('#movie_player');
+      const pr = p && p.getPlayerResponse && p.getPlayerResponse();
+      st = pr && pr.playabilityStatus;
+    } catch (e) {}
+    const vid = currentVideoId();
+    if (!st || !vid || st.status === 'OK') { refusedFor = null; return; }
+    if (refusedFor !== vid) { refusedFor = vid; refusedSince = Date.now(); return; }
+    if (refusedNoted !== vid && Date.now() - refusedSince > 4000) {
+      refusedNoted = vid;
+      const why = st.reason || (st.status || '').toLowerCase().replace(/_/g, ' ');
+      done('error', false, "YouTube won't play this one: " + why);
+    }
+  }
+
   let tickCount = 0;
   function tick() {
     tickCount++;
     preferLowVideo();
+    if (tickCount % 3 === 0) checkPlayable();
     addTheme(); skipAds(); report();
     checkInterruption();
     autoplayAfterSkip();
