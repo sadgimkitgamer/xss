@@ -25,7 +25,7 @@ pos() { adb logcat -d -s Ember:I | grep 'state {' | tail -1 | sed -E 's/.*"pos":
 playing() { adb logcat -d -s Ember:I | grep 'state {' | tail -1 | grep -q '"playing":true'; }
 
 echo "== Foreground: open song"
-adb shell am start -W -a android.intent.action.VIEW -d "$SONG" --ez autoplay true com.ember.music/.MainActivity
+adb shell am start -W -a android.intent.action.VIEW -d "$SONG" --ez autoplay true ${EMBER_EXTRA:-} com.ember.music/.MainActivity
 sleep 60
 shot 1-foreground
 P1=$(pos); playing && FG=yes || FG=no

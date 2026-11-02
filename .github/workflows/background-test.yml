@@ -7,8 +7,19 @@ on:
 
 jobs:
   emulator:
+    name: emulator (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ad blocking on
+            extra: ''
+          - name: ad blocking off
+            extra: '--ez noadblock true'
+    env:
+      EMBER_EXTRA: ${{ matrix.extra }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,5 +52,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: background-test
+          name: background-test-${{ strategy.job-index }}
           path: test-out/

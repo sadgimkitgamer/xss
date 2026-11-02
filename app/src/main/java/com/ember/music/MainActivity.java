@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     private static String injectJs;
 
     private static int consoleErrors;
+    private static boolean noAdBlock;
     private PlayerWebView web;
     private ProgressBar progress;
     private View splash;
@@ -89,7 +90,9 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
-        if (injectJs == null) injectJs = buildInjectJs();
+        // "noadblock" is only used by the automated test, to compare with ad blocking off
+        noAdBlock = getIntent().getBooleanExtra("noadblock", false);
+        if (injectJs == null) injectJs = (noAdBlock ? "window.__emberNoAdBlock=true;\n" : "") + buildInjectJs();
         PlayerBridge.closing = false;
 
         boolean reused = shared != null;
@@ -320,7 +323,7 @@ public class MainActivity extends Activity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
-                if (isAd(req.getUrl())) {
+                if (!noAdBlock && isAd(req.getUrl())) {
                     return new WebResourceResponse("text/plain", "utf-8",
                             new ByteArrayInputStream(new byte[0]));
                 }

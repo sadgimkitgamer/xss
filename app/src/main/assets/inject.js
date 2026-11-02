@@ -74,12 +74,15 @@
     } catch (e) {}
     return o;
   }
+  if (window.__emberNoAdBlock) log('ad blocking OFF (test)');
   const origParse = JSON.parse;
+  if (!window.__emberNoAdBlock) {
   JSON.parse = function () { return prune(origParse.apply(this, arguments)); };
   const origJson = Response.prototype.json;
   Response.prototype.json = function () { return origJson.apply(this, arguments).then(prune); };
+  }
   let initialPR;
-  try {
+  if (!window.__emberNoAdBlock) try {
     Object.defineProperty(window, 'ytInitialPlayerResponse', {
       configurable: true,
       get: () => initialPR,
