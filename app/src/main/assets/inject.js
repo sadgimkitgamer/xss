@@ -599,12 +599,18 @@
   }
   (function swipeDown() {
     let sx = 0, sy = 0, st = 0, active = false, dragging = false;
-    const blocked = (t) => t && t.closest && t.closest(
-      'tp-yt-paper-slider, #progress-bar, input, textarea, ytmusic-player-queue, #side-panel, .slider');
-    // Don't steal the gesture from lists you're scrolling (Up next, Lyrics, Related)
+    // Only the seek bar and text fields keep their own drag; everything else on the
+    // player (song name, Up next, Lyrics, Comments, Related) can be swiped down.
+    const blocked = (t) => t && t.closest && t.closest('tp-yt-paper-slider, #progress-bar, input, textarea');
+    // …unless you're partway down a list: then the drag scrolls the list back up first.
     const scrolledParent = (t) => {
-      const list = t && t.closest && t.closest('ytmusic-tab-renderer, #tab-renderer, .tab-content, ytmusic-player-queue');
-      return !!(list && list.scrollTop > 0);
+      for (let el = t; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+        if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight + 2) {
+          const oy = getComputedStyle(el).overflowY;
+          if (oy === 'auto' || oy === 'scroll') return true;
+        }
+      }
+      return false;
     };
     document.addEventListener('touchstart', (e) => {
       active = false; dragging = false;
@@ -625,8 +631,8 @@
       const p = (e.changedTouches && e.changedTouches[0]) || { clientX: sx, clientY: sy };
       const dx = p.clientX - sx, dy = p.clientY - sy, dt = Date.now() - st;
       // A short drag or a quick flick is enough
-      const far = dy > Math.min(110, window.innerHeight * 0.15);
-      const flick = dy > 40 && dt < 300;
+      const far = dy > Math.min(80, window.innerHeight * 0.12);
+      const flick = dy > 30 && dt < 300;
       setDrag(0);
       if (dragging && (far || flick) && Math.abs(dx) < dy * 0.7) minimizePlayer();
       else if (dy > 40) log('swipe too short/sideways (dy=' + Math.round(dy) + ', dx=' + Math.round(dx) + ')');

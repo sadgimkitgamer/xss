@@ -32,7 +32,7 @@ P1=$(pos); playing && FG=yes || FG=no
 echo "foreground: playing=$FG pos=$P1"
 
 echo "== Swipe down on the player"
-adb shell input swipe 160 170 160 560 250
+adb shell input swipe 160 400 160 510 250   # short swipe starting low (song name / tabs)
 sleep 4
 shot 1b-after-swipe
 adb logcat -d -s Ember:I | grep -E 'swipe|heartbeat' | tail -4
