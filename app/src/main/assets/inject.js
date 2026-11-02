@@ -565,22 +565,26 @@
         }, 2500);
         return true;
       };
+      // Fastest reliable path first. With the full player open its Next/Previous button
+      // works; in the mini player (and from the notification/lock screen) asking YouTube
+      // Music for the queue does. The rest are fallbacks.
       const methods = [
         ['media session', () => call(dir > 0 ? 'nexttrack' : 'previoustrack')],
         ['button', () => playerOpen() && click(sel)],
+        ['ask youtube for the queue', askAndGo],
         ['button tap', () => tapEl(sel)],
         ['open player + button', expandAndPress],
         ['queue navigation', navigateInQueue],
-        ['ask youtube for the queue', askAndGo],
       ];
+      const t0 = Date.now();
       for (const [name, fn] of methods) {
         let tried = false;
         try { tried = !!(await fn()); } catch (e) {}
         if (!tried) continue;
-        for (let i = 0; i < 20; i++) {           // wait up to ~4s for the song to change
+        for (let i = 0; i < 12; i++) {           // wait up to ~2.4s for the song to change
           await new Promise((r) => setTimeout(r, 200));
           if (currentVideoId() !== before) {
-            log((dir > 0 ? 'next' : 'prev') + ' via ' + name + ' -> ' + currentVideoId());
+            log((dir > 0 ? 'next' : 'prev') + ' via ' + name + ' -> ' + currentVideoId() + ' in ' + (Date.now() - t0) + 'ms');
             // make sure the new song actually starts
             for (let j = 0; j < 30; j++) {
               await new Promise((r) => setTimeout(r, 300));

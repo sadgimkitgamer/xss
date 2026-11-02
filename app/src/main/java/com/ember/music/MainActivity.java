@@ -276,6 +276,7 @@ public class MainActivity extends Activity {
         if (shared == null) return;
         Log.i(PlayerBridge.TAG, "destroying player");
         if (shared.getParent() != null) ((ViewGroup) shared.getParent()).removeView(shared);
+        PlayerBridge.forgetPlayer(shared);
         shared.stopLoading();
         shared.destroy();
         shared = null;

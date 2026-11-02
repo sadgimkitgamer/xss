@@ -55,9 +55,14 @@ final class PlayerBridge {
         webRef = new WeakReference<>(web);
     }
 
+    /** The screen went away. The player keeps running, so the controls stay connected to it. */
     static void detach() {
         activityRef = new WeakReference<>(null);
-        webRef = new WeakReference<>(null);
+    }
+
+    /** The player itself was destroyed (Close, or replaced by a new one). */
+    static void forgetPlayer(WebView web) {
+        if (webRef.get() == web) webRef = new WeakReference<>(null);
     }
 
     static void setListener(Listener l) {
