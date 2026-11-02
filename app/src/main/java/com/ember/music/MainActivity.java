@@ -141,8 +141,9 @@ public class MainActivity extends Activity {
                 web.postDelayed(() -> PlayerBridge.control("seek",
                         Math.max(0, PlayerBridge.last.dur - 6000)), 100000L);
             }
-        } else if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
-            web.loadUrl(HOME);
+        } else {
+            String saved = savedInstanceState != null ? savedInstanceState.getString("emberUrl") : null;
+            web.loadUrl(saved != null && isYouTube(saved) ? saved : HOME);
         }
 
         if (Build.VERSION.SDK_INT >= 33
@@ -606,7 +607,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
-        web.saveState(out);
+        // Deliberately NOT web.saveState(out): YouTube Music's page history can grow to ~1 MB,
+        // and Android crashes the app (TransactionTooLargeException) when a screen's saved
+        // state is that big. The player lives on separately anyway; we only remember the URL.
+        if (lastUrl != null) out.putString("emberUrl", lastUrl);
     }
 
     @Override

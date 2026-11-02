@@ -139,6 +139,10 @@ if grep -q 'E Ember   : CRASH' "$OUT/full.log" 2>/dev/null || grep -q 'CRASH ' "
   echo "FAIL: Ember crashed"; grep -A20 'CRASH' "$OUT/ember.log" | head -30; exit 1
 fi
 
+if grep -q 'TransactionTooLargeException' "$OUT/full.log" 2>/dev/null; then
+  echo "FAIL: saved screen state too large (TransactionTooLargeException)"; exit 1
+fi
+
 echo "--- coming back to the app:"
 grep -E 'activity|page started|destroying player' "$OUT/return.log" || echo "(no screen changes)"
 if grep -q 'page started' "$OUT/return.log" || grep -q 'destroying player' "$OUT/return.log"; then
