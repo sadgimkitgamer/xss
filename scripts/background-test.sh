@@ -3,7 +3,8 @@
 # the screen off, then checks from the app's logs that the song kept playing.
 set -u
 # Never let a stuck/crashed emulator hang the whole run
-adb() { timeout 90 command adb "$@"; }
+ADB_BIN=$(command -v adb)
+adb() { timeout 90 "$ADB_BIN" "$@"; }
 APK="$1"
 OUT=test-out
 mkdir -p "$OUT"
