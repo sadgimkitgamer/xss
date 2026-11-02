@@ -103,6 +103,8 @@ grep -q 'playlists {' "$OUT/ember.log" || { echo "FAIL: playlist picker got no a
 grep -qE 'action like ' "$OUT/ember.log" || { echo "FAIL: like button did nothing"; exit 1; }
 grep -qE 'action save ' "$OUT/ember.log" || { echo "FAIL: save button did nothing"; exit 1; }
 
+grep -q 'Ember fox' "$OUT/1-foreground.xml" || { echo "FAIL: the fox isn't on screen"; exit 1; }
+
 [ "$FG" = yes ] || { echo "FAIL: did not start playing in the foreground"; exit 1; }
 # Position must keep changing (it can go back to 0 when the Loop check restarts the song)
 [ "$BG" = yes ] && [ "${P2:-0}" != "${P1:-0}" ] || { echo "FAIL: stopped in background"; exit 1; }

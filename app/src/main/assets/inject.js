@@ -282,7 +282,7 @@
     }
   }
 
-  // Quick save goes to the playlist you picked in Ember (red playlist button), or to an
+  // Quick save goes to the playlist you picked in Ember (long-press the fox), or to an
   // automatically created private "Ember Saves" playlist if you haven't picked one.
   const SAVE_KEY = 'ember.savePlaylistId';
   const SAVE_NAME_KEY = 'ember.savePlaylistName';
@@ -332,7 +332,7 @@
         name = DEFAULT_NAME;
       }
       savedIds.add(id);
-      done('save', true, 'Saved to "' + name + '"' + (chosen ? '' : ' · tap the red playlist button in Ember to pick your own'));
+      done('save', true, 'Saved to "' + name + '"' + (chosen ? '' : ' · long-press the fox in Ember to pick your own'));
     } catch (e) {
       done('save', false, errText(e, 'save to "' + name + '"'));
     }
@@ -591,15 +591,16 @@
       if (!active) return;
       const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
       if (!dragging && (dy < -10 || Math.abs(dx) > Math.max(30, dy))) { active = false; setDrag(0); return; }
-      if (dy > 15) { dragging = true; setDrag(dy * 0.6); }
+      if (dy > 10) { dragging = true; setDrag(dy * 0.7); }
     }, { capture: true, passive: true });
     const end = (e) => {
       if (!active) return;
       active = false;
       const p = (e.changedTouches && e.changedTouches[0]) || { clientX: sx, clientY: sy };
       const dx = p.clientX - sx, dy = p.clientY - sy, dt = Date.now() - st;
-      const far = dy > Math.min(220, window.innerHeight * 0.3);
-      const flick = dy > 80 && dt < 350;
+      // A short drag or a quick flick is enough
+      const far = dy > Math.min(110, window.innerHeight * 0.15);
+      const flick = dy > 40 && dt < 300;
       setDrag(0);
       if (dragging && (far || flick) && Math.abs(dx) < dy * 0.7) minimizePlayer();
       else if (dy > 40) log('swipe too short/sideways (dy=' + Math.round(dy) + ', dx=' + Math.round(dx) + ')');

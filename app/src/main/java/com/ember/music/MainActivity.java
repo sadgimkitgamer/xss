@@ -13,7 +13,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ClipDrawable;
 import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -33,7 +32,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -228,20 +226,11 @@ public class MainActivity extends Activity {
         progress.setMax(100);
         root.addView(progress, new FrameLayout.LayoutParams(-1, dp(3), Gravity.TOP));
 
-        // Small button to choose which of your playlists "Quick save" adds songs to
-        ImageButton pick = new ImageButton(this);
-        pick.setImageResource(R.drawable.ic_save);
-        pick.setContentDescription("Ember settings");
-        GradientDrawable round = new GradientDrawable();
-        round.setShape(GradientDrawable.OVAL);
-        round.setColor(ACCENT);
-        pick.setBackground(round);
-        pick.setElevation(dp(6));
-        pick.setAlpha(0.9f);
-        pick.setOnClickListener(v -> showMenu());
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.BOTTOM | Gravity.END);
-        lp.setMargins(0, 0, dp(14), dp(150));
-        root.addView(pick, lp);
+        // The fox: tap to play with it, drag to move it, long-press for Ember's settings
+        FoxView fox = new FoxView(this);
+        fox.setOnFoxLongPress(this::showMenu);
+        root.addView(fox, FoxView.defaultSize(this));
+        fox.restorePosition();
 
         // Splash shown until the first page load finishes
         LinearLayout sp = new LinearLayout(this);
