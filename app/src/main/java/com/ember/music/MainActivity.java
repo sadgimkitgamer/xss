@@ -95,6 +95,9 @@ public class MainActivity extends Activity {
         if (injectJs == null) injectJs = (noAdBlock ? "window.__emberNoAdBlock=true;\n" : "") + buildInjectJs();
         PlayerBridge.closing = false;
 
+        // Only carry the old player over if music is playing; otherwise a fresh one is safer
+        // (re-attaching a player that was still loading could leave the page frozen).
+        if (shared != null && !PlayerBridge.last.playing) destroyPlayer();
         boolean reused = shared != null;
         Log.i(PlayerBridge.TAG, "activity created (reusing player: " + reused + ")");
         if (reused) {
@@ -547,7 +550,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        Log.i(PlayerBridge.TAG, "activity destroyed (finishing=" + isFinishing()
+        Log.i(PlayerBridge.TAG, "activity destroyed (changes=0x" + Integer.toHexString(getChangingConfigurations())
+                + ", finishing=" + isFinishing()
                 + ", config change=" + isChangingConfigurations()
                 + ", closing=" + PlayerBridge.closing + ", playing=" + PlayerBridge.last.playing + ")");
         PlayerBridge.detach();
@@ -556,6 +560,8 @@ public class MainActivity extends Activity {
         if (stopEverything) {
             stopService(new Intent(this, MusicService.class));
             destroyPlayer();
+        } else if (!PlayerBridge.last.playing) {
+            destroyPlayer();   // nothing to keep alive; the next screen makes a fresh player
         } else if (web != null) {
             // Keep the music going: park the player until the screen comes back
             if (web.getParent() != null) ((ViewGroup) web.getParent()).removeView(web);
