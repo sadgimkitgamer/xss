@@ -27,7 +27,7 @@ adb logcat -c
 
 shot() {
   adb exec-out screencap -p > "$OUT/$1.png" || true
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb shell cat /sdcard/ui.xml > "$OUT/$1.xml"
+  timeout 40 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && timeout 20 adb shell cat /sdcard/ui.xml > "$OUT/$1.xml"
   echo "--- on screen ($1):"
   grep -oE '(text|content-desc)="[^"]+"' "$OUT/$1.xml" 2>/dev/null | sed -E 's/^[a-z-]+="//; s/"$//' | awk 'length>1' | head -40 | tr '\n' '|'
   echo
@@ -38,7 +38,7 @@ pos() { adb logcat -d -s Ember:I | grep 'state {' | tail -1 | sed -E 's/.*"pos":
 playing() { adb logcat -d -s Ember:I | grep 'state {' | tail -1 | grep -q '"playing":true'; }
 
 echo "== Foreground: open song"
-adb shell am start -W -a android.intent.action.VIEW -d "$SONG" --ez autoplay true ${EMBER_EXTRA:-} com.ember.music/.MainActivity
+timeout 90 adb shell am start -W -a android.intent.action.VIEW -d "$SONG" --ez autoplay true ${EMBER_EXTRA:-} com.ember.music/.MainActivity
 sleep 60
 shot 1-foreground
 P1=$(pos); playing && FG=yes || FG=no
@@ -47,7 +47,7 @@ echo "foreground: playing=$FG pos=$P1"
 echo "== Swipe down on the player"
 # Dismiss emulator "X isn't responding" popups that would cover the screen
 dismiss_popups() {
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb shell cat /sdcard/ui.xml > "$OUT/popup.xml"
+  timeout 40 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && timeout 20 adb shell cat /sdcard/ui.xml > "$OUT/popup.xml"
   if grep -q "isn't responding" "$OUT/popup.xml"; then
     WB=$(grep -o 'text="Wait"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' "$OUT/popup.xml" | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' | head -1)
     read A B C D <<<"$(echo "$WB" | tr -c '0-9' ' ')"
@@ -95,7 +95,7 @@ playing && AFTER=yes || AFTER=no
 echo "after call: playing=$AFTER"
 
 echo "== Android kills the page's process while music plays in the background"
-adb root >/dev/null 2>&1; sleep 3
+timeout 30 adb root >/dev/null 2>&1; sleep 3; timeout 30 adb wait-for-device
 # Ember's page runs in a sandboxed process started after the app itself: pick the newest one
 APID=$(adb shell pidof com.ember.music | tr -d '\r' | awk '{print $1}')
 RPID=$(adb shell ps -A -o PID,NAME | grep -i sandboxed_process | awk -v a="${APID:-0}" '$1 > a {print $1}' | sort -n | tail -1)
@@ -111,7 +111,7 @@ sleep 50
 
 echo "== Back to the app"
 MARK=$(adb logcat -d -s Ember:I | wc -l)
-adb shell am start -n com.ember.music/.MainActivity >/dev/null
+timeout 60 adb shell am start -n com.ember.music/.MainActivity >/dev/null
 sleep 10
 adb logcat -d -s Ember:I | tail -n +$((MARK + 1)) > "$OUT/return.log"
 adb shell settings put global always_finish_activities 0
