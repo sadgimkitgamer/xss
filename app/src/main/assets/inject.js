@@ -65,10 +65,18 @@
 
   /* ---------- 2a. Strip ads from player data ---------- */
   const AD_KEYS = ['adPlacements', 'adSlots', 'playerAds', 'adBreakHeartbeatParams'];
+  // Songs that got stuck once are left untouched (see "self-repair" below)
+  const ss = {
+    get: (k, d) => { try { return JSON.parse(sessionStorage.getItem(k)) || d; } catch (e) { return d; } },
+    set: (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const noPrune = new Set(ss.get('ember.noPrune', []));
   function prune(o) {
     if (!o || typeof o !== 'object') return o;
     try {
       if (Array.isArray(o)) { o.forEach(prune); return o; }
+      const vd = o.videoDetails || (o.playerResponse && o.playerResponse.videoDetails);
+      if (vd && noPrune.has(vd.videoId)) return o;
       for (const k of AD_KEYS) if (k in o) delete o[k];
       if (o.playerResponse) prune(o.playerResponse);
       if (o.response) prune(o.response);
@@ -921,11 +929,43 @@
     }
   }
 
+  /* ---------- 10. Self-repair for songs that get stuck ----------
+   * Some videos carry ads stitched into the stream; with ad info removed, YouTube's
+   * player can wait forever. If a song makes no progress for ~12s while it should be
+   * playing, reload it from the same spot with its ad info left alone (once per song). */
+  const healed = new Set(ss.get('ember.healed', []));
+  let stallSince = 0, lastT = -1;
+  function stallWatch() {
+    const v = q('video');
+    const vid = currentVideoId();
+    if (!v || !vid || mutedForAd || skipping || healed.has(vid)) { stallSince = 0; return; }
+    let ok = true;
+    try {
+      const pr = q('#movie_player').getPlayerResponse();
+      ok = !pr || !pr.playabilityStatus || pr.playabilityStatus.status === 'OK';
+    } catch (e) {}
+    const wants = (wantPlay || pendingAutoplay || !v.paused) && !v.ended;
+    const stuck = ok && wants && (v.readyState < 3 || v.currentTime === lastT) && !interrupted;
+    lastT = v.currentTime;
+    if (!stuck) { stallSince = 0; return; }
+    if (!stallSince) { stallSince = Date.now(); return; }
+    if (Date.now() - stallSince < 12000) return;
+    stallSince = 0;
+    healed.add(vid); ss.set('ember.healed', [...healed].slice(-50));
+    noPrune.add(vid); ss.set('ember.noPrune', [...noPrune].slice(-200));
+    const at = Math.floor(v.currentTime || 0);
+    log('self-repair: ' + vid + ' stuck at ' + at + 's (ready=' + v.readyState + ') -> reloading it with ads left to the skipper');
+    try { sessionStorage.setItem('ember.autoplay', '1'); } catch (e) {}
+    const list = (location.search.match(/[?&]list=([^&]+)/) || [])[1];
+    location.assign('/watch?v=' + vid + (list ? '&list=' + list : '') + (at > 2 ? '&t=' + at + 's' : ''));
+  }
+
   let tickCount = 0;
   function tick() {
     tickCount++;
     preferLowVideo();
     if (tickCount % 3 === 0) checkPlayable();
+    if (tickCount % 2 === 0) stallWatch();
     addTheme(); skipAds(); report();
     checkInterruption();
     autoplayAfterSkip();

@@ -65,7 +65,8 @@ public class MainActivity extends Activity {
             "adservice.google.com", "googletagmanager.com"
     };
     private static final String[] AD_PATHS = {
-            "/pagead/", "/api/stats/ads", "/ptracking", "/get_midroll_", "/youtubei/v1/log_event",
+            // (not "get_midroll_info": with stitched-in ads the player can wait on it forever)
+            "/pagead/", "/api/stats/ads", "/ptracking", "/youtubei/v1/log_event",
             "/api/stats/qoe?adformat", "/pcs/activeview",
             // telemetry that only slows things down
             "/csi_204", "/generate_204", "/api/stats/atr", "/log?format"
@@ -294,9 +295,6 @@ public class MainActivity extends Activity {
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
         cm.setAcceptThirdPartyCookies(web, true);
-
-        // Smoother scrolling: draw the page just outside the screen ahead of time
-        s.setOffscreenPreRaster(true);
 
         // Keep the page's renderer process at high priority even when not on screen
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
