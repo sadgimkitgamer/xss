@@ -24,6 +24,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -337,6 +338,19 @@ public class MainActivity extends Activity {
                 if (req.isForMainFrame()) {
                     Log.w(PlayerBridge.TAG, "page http " + resp.getStatusCode() + " " + req.getUrl());
                 }
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                // The page crashed: start a fresh player instead of letting the app crash
+                Log.w(PlayerBridge.TAG, "player page crashed (" + (detail.didCrash() ? "crash" : "killed") + ") -> restarting");
+                if (view == shared) {
+                    if (shared.getParent() != null) ((ViewGroup) shared.getParent()).removeView(shared);
+                    shared.destroy();
+                    shared = null;
+                }
+                recreate();
+                return true;
             }
 
             @Override
