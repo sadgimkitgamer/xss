@@ -510,7 +510,11 @@
               if (nv && nv.readyState >= 3 && nv.currentTime > 0.3) { log('new song playing'); return; }
               if (nv && nv.paused && j === 10) { wantPlay = true; const pp = nv.play(); if (pp && pp.catch) pp.catch(() => {}); }
             }
-            log('new song did not start (ready=' + (q('video') || {}).readyState + ')');
+            const stuckId = currentVideoId();
+            log('new song did not start (ready=' + (q('video') || {}).readyState + ') -> reloading it');
+            try { sessionStorage.setItem('ember.autoplay', '1'); } catch (e) {}
+            const list = (location.search.match(/[?&]list=([^&]+)/) || [])[1];
+            location.assign('/watch?v=' + stuckId + (list ? '&list=' + list : ''));
             return;
           }
         }
@@ -718,8 +722,12 @@
   ['play', 'pause', 'ended', 'loadedmetadata', 'seeked'].forEach((t) =>
     document.addEventListener(t, () => { skipAds(); report(); }, true));
 
-  ['waiting', 'stalled', 'error', 'ended', 'emptied'].forEach((t) =>
+  ['waiting', 'stalled', 'ended', 'emptied'].forEach((t) =>
     document.addEventListener(t, () => log('media ' + t), true));
+  document.addEventListener('error', (e) => {
+    const err = e.target && e.target.error;
+    if (e.target && e.target.tagName === 'VIDEO') log('media error ' + (err ? err.code + ' ' + err.message : '?'));
+  }, true);
   window.addEventListener('load', () => log('loaded ' + location.href + ' "' + document.title + '"'));
 
   let pendingAutoplay = false;
