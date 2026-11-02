@@ -2,6 +2,8 @@
 # Plays a song in Ember on an emulator, sends the app to the background and turns
 # the screen off, then checks from the app's logs that the song kept playing.
 set -u
+# Never let a stuck/crashed emulator hang the whole run
+adb() { timeout 90 command adb "$@"; }
 APK="$1"
 OUT=test-out
 mkdir -p "$OUT"
